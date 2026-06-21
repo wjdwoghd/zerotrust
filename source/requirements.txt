@@ -1,0 +1,16 @@
+tornado>=6.4
+PyJWT>=2.8
+bcrypt>=4.0
+pyotp>=2.9
+
+# L2 — PostgreSQL driver (운영 모드 필수)
+psycopg2-binary>=2.9
+
+# .env 파일 로더 (선택. 미설치 시 환경변수만 사용)
+python-dotenv>=1.0
+
+# 테스트
+pytest>=8.0
+pytest-asyncio>=0.23
+pytest-cov>=4.1
+coverage>=7.4

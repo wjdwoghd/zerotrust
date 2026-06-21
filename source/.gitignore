@@ -1,0 +1,35 @@
+# 비밀 파일
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+env/
+
+# 테스트
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# DB 파일
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# 로그 / 캐시 (ITEM 14)
+*.log
+apps/launchers_debug.log

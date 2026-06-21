@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>가상 기기 · Virtual Device</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    /* 경찰 시스템 가상 토큰 — 흰/네이비 + 금색 액센트 */
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                   "Helvetica Neue", "Apple SD Gothic Neo", Arial, sans-serif;
+      background: linear-gradient(135deg, #F0F4FA 0%, #DBE5F2 100%);
+      color: #0F172A;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px;
+    }
+    .frame {
+      width: 100%;
+      max-width: 320px;
+      background: #FFFFFF;
+      border: 1px solid #DBE5F2;
+      border-top: 4px solid #D4AF37;
+      border-radius: 24px;
+      padding: 20px 18px 24px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.10);
+    }
+    .notch {
+      width: 80px; height: 6px; background: #DBE5F2;
+      border-radius: 3px; margin: 0 auto 14px;
+    }
+    h1 {
+      font-size: 13px; font-weight: 600; color: #1E3A8A;
+      margin: 0 0 4px; letter-spacing: 0.04em; text-transform: uppercase;
+    }
+    .device-name {
+      font-size: 16px; font-weight: 700; color: #0A1736; margin-bottom: 2px;
+    }
+    .device-id {
+      font-size: 11px; color: #64748B; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      margin-bottom: 20px;
+    }
+    .otp-box {
+      background: #F0F4FA;
+      border: 1px solid #DBE5F2;
+      border-left: 3px solid #D4AF37;
+      border-radius: 12px;
+      padding: 20px 16px;
+      text-align: center;
+      margin-bottom: 14px;
+    }
+    .otp-label {
+      font-size: 11px; color: #475569; letter-spacing: 0.2em; margin-bottom: 8px;
+    }
+    .otp-code {
+      font-size: 44px; font-weight: 700; letter-spacing: 0.12em;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: #1E3A8A;
+      line-height: 1.1;
+    }
+    .otp-code.stale { color: #94A3B8; }
+    .progress-wrap {
+      height: 6px; background: #E2E8F0; border-radius: 3px;
+      overflow: hidden; margin-top: 12px;
+    }
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #1E3A8A, #D4AF37);
+      transition: width 1s linear;
+    }
+    .expires {
+      font-size: 11px; color: #475569; margin-top: 6px; text-align: right;
+    }
+    .status {
+      font-size: 12px; text-align: center; padding: 8px;
+      margin-top: 10px; border-radius: 8px;
+    }
+    .status.ok   { background: #D1FAE5;  color: #065F46; }
+    .status.err  { background: #FEE2E2;  color: #991B1B; }
+    .hint {
+      font-size: 11px; color: #64748B; margin-top: 16px; line-height: 1.5;
+    }
+    button.copy {
+      width: 100%; padding: 10px;
+      background: #1E3A8A; color: #FFFFFF; border: none;
+      border-radius: 8px; font-weight: 600; cursor: pointer;
+      margin-top: 8px;
+    }
+    button.copy:hover { background: #172E6F; }
+    button.copy:disabled { background: #DBE5F2; color: #94A3B8; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <div class="notch"></div>
+    <h1>Virtual MFA Device</h1>
+    <div id="device-name" class="device-name">로딩 중…</div>
+    <div id="device-id"   class="device-id">device_id 로딩 중…</div>
+
+    <div class="otp-box">
+      <div class="otp-label">ONE-TIME PASSWORD</div>
+      <div id="otp" class="otp-code">------</div>
+      <div class="progress-wrap">
+        <div id="bar" class="progress-bar" style="width:100%"></div>
+      </div>
+      <div id="expires" class="expires">-</div>
+    </div>
+
+    <button id="copy" class="copy" disabled>OTP 복사</button>
+    <div id="status" class="status" style="display:none"></div>
+
+    <div class="hint">
+      이 창은 MFA 단계에서 입력할 6자리 코드를 실시간으로 표시합니다.<br>
+      30초마다 코드가 갱신됩니다. 모 창(설정 페이지)을 닫으면 인증 토큰을
+      잃어 더 이상 갱신되지 않습니다.
+    </div>
+  </div>
+
+<script>
+(() => {
+  const hash = window.location.hash.replace('#', '');
+  const devicePk = hash ? parseInt(hash, 10) : null;
+
+  const elName = document.getElementById('device-name');
+  const elId   = document.getElementById('device-id');
+  const elOtp  = document.getElementById('otp');
+  const elBar  = document.getElementById('bar');
+  const elExp  = document.getElementById('expires');
+  const elCopy = document.getElementById('copy');
+  const elStat = document.getElementById('status');
+
+  function setStatus(kind, msg) {
+    elStat.style.display = 'block';
+    elStat.className = 'status ' + kind;
+    elStat.textContent = msg;
+  }
+
+  function getCtx() {
+    try {
+      // 팝업이 가질 수 있는 opener 는 설정 페이지(window.__vd_ctx__) 한 곳.
+      if (window.opener && window.opener.__vd_ctx__) {
+        return window.opener.__vd_ctx__;
+      }
+    } catch (e) {
+      // cross-origin 이면 접근 불가 — 같은 origin 이므로 정상 동작해야 함
+    }
+    return null;
+  }
+
+  if (!devicePk) {
+    setStatus('err', 'URL 해시에 device_pk 가 없습니다.');
+    return;
+  }
+
+  const ctx = getCtx();
+  if (!ctx || !ctx.token) {
+    setStatus('err', '인증 컨텍스트를 찾을 수 없습니다. 설정 페이지에서 다시 열어 주세요.');
+    return;
+  }
+  const token = ctx.token;
+  // 로그인 단계(1차 토큰)인지 MFA 완료 후인지 구분
+  const isLoginStage = ctx.stage === 'login';
+  // 로그인 단계 OTP 조회는 device_id 문자열이 필요
+  const loginDeviceId = ctx.deviceId || null;
+
+  if (ctx.deviceName) {
+    elName.textContent = ctx.deviceName;
+  }
+
+  let currentOtp = '------';
+
+  elCopy.addEventListener('click', async () => {
+    if (currentOtp === '------') return;
+    try {
+      await navigator.clipboard.writeText(currentOtp);
+      setStatus('ok', '클립보드에 복사되었습니다');
+      setTimeout(() => { elStat.style.display = 'none'; }, 1200);
+    } catch (e) {
+      setStatus('err', '복사 실패: ' + e.message);
+    }
+  });
+
+  async function refresh() {
+    try {
+      let res;
+      if (isLoginStage) {
+        // 1차 토큰으로 호출 가능한 엔드포인트
+        res = await fetch('/api/auth/mfa/otp', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token,
+          },
+          body: JSON.stringify({ device_id: loginDeviceId }),
+        });
+      } else {
+        res = await fetch(`/api/devices/${devicePk}/totp`, {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+      }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401) {
+          setStatus('err', '세션이 만료되었습니다. 모 창에서 재로그인 후 다시 여세요.');
+          return;
+        }
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      elName.textContent = data.device_name || elName.textContent;
+      elId.textContent   = data.device_id;
+      if (data.otp_code) {
+        currentOtp = data.otp_code;
+        elOtp.textContent = data.otp_code.replace(/(\d{3})(\d{3})/, '$1 $2');
+        elOtp.classList.remove('stale');
+        elCopy.disabled = false;
+      } else {
+        elOtp.textContent = '------';
+        elOtp.classList.add('stale');
+        elCopy.disabled = true;
+        if (data.hint) elExp.textContent = data.hint;
+      }
+      if (typeof data.expires_in === 'number') {
+        elExp.textContent = `${data.expires_in}초 후 갱신`;
+        elBar.style.width = ((data.expires_in / 30) * 100).toFixed(1) + '%';
+      }
+    } catch (e) {
+      setStatus('err', 'OTP 요청 실패: ' + e.message);
+    }
+  }
+
+  // 첫 로드
+  refresh();
+  // 1초마다 재계산 — 서버가 계산한 expires_in 기준으로 진행 막대 업데이트
+  setInterval(refresh, 1000);
+})();
+</script>
+</body>
+</html>
