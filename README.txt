@@ -1,4 +1,4 @@
-ZeroTrust USB package
+# ZeroTrust USB package
 
 1. Windows PC에서 installer\ZeroTrustDemoSetup.exe 를 실행합니다.
    설치 진행 창이 뜨며, 단계별 진행 상황과 로그를 볼 수 있습니다.
@@ -12,3 +12,5 @@ ZeroTrust USB package
 4. source 폴더에는 설치 파일을 만들 때 사용한 프로젝트 코드와 패키징 파일이 들어 있습니다.
 
 설치 파일은 Python 런타임과 PostgreSQL 런타임을 포함한 self-contained 설치 파일입니다.
+
+[설치파일 다운로드] (https://github.com/wjdwoghd/zerotrust/releases/latest)
