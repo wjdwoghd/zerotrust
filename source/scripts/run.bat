@@ -142,6 +142,13 @@ shift
 goto :GATHER_ARGS
 
 :RUN_PYTEST
+python scripts\check_code_conventions.py
+if errorlevel 1 (
+    echo [run:test] code convention check failed.
+    popd
+    exit /b 1
+)
+
 python -m pytest tests/ %_PYTEST_ARGS%
 set "_rc=%errorlevel%"
 
