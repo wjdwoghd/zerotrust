@@ -362,14 +362,13 @@ from database import get_db
 
 ## Git 협업 규칙
 
-현재 저장소는 안정 버전과 개선 작업을 분리하는 `main`/`develop` 전략을 사용합니다. 기능·수정 브랜치는 `develop`에서 분기하고 검증 후 다시 `develop`로 통합합니다.
+현재 저장소는 안정 버전과 개선 작업을 분리하는 `main`/`develop` 전략을 사용합니다. 기능 추가·수정·개선·보완은 `develop`에서 `feat/<기능명>` 브랜치를 분기하고, 검증 후 다시 `develop`로 통합합니다.
 
 ```text
 main
 ├─ hotfix/<urgent-fix>
 └─ develop
    ├─ feat/<feature-name>
-   ├─ fix/<bug-name>
    ├─ docs/<document-name>
    └─ test/<test-name>
 ```
@@ -378,8 +377,7 @@ main
 |---|---|
 | `main` | 발표·배포 가능한 안정 상태 |
 | `develop` | 개선·보완 작업의 통합 브랜치 |
-| `feat/*` | 새로운 기능 |
-| `fix/*` | 일반 버그 수정 |
+| `feat/*` | 기능 추가·수정·개선·보완 |
 | `docs/*` | 문서 전용 변경 |
 | `test/*` | 테스트 보강 |
 | `hotfix/*` | 배포본의 긴급 보안·장애 수정 |
