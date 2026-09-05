@@ -138,10 +138,6 @@ _SCHEMAS: Dict[AuditEvent, tuple] = {
 }
 
 
-def required_fields(event: AuditEvent) -> tuple:
-    return _SCHEMAS.get(event, ())
-
-
 # ── 구조화 JSON 로거 (L5-1) ─────────────────────────────────────
 _logger = logging.getLogger("zerotrust.audit")
 if not _logger.handlers:
