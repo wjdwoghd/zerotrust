@@ -30,6 +30,7 @@ def create_token(user_id: int, username: str, role: str,
                  expiry_hours: Optional[int] = None,
                  admin_gated: bool = False,
                  approval_request_id: Optional[int] = None) -> str:
+    """사용자·세션·기기 컨텍스트를 서명된 JWT 클레임으로 발급한다."""
     now = int(time.time())
     hours = expiry_hours if expiry_hours is not None else JWT_EXPIRY_HOURS
     payload = {
