@@ -28,6 +28,8 @@ _CACHE: Dict[str, float] = {}
 _OVERRIDES_CACHE: Dict[Tuple[str, str], float] = {}
 _CACHE_LOADED_AT: float = 0.0
 _CACHE_TTL_SEC = 300  # 5분
+_LAST_RELOAD_FAILURE_AT: float = 0.0
+_RELOAD_FAILURE_BACKOFF_SEC = 5.0
 
 
 def _reload() -> None:
@@ -37,6 +39,7 @@ def _reload() -> None:
     위해 get() 이 잡는다.
     """
     global _CACHE, _OVERRIDES_CACHE, _CACHE_LOADED_AT
+    global _LAST_RELOAD_FAILURE_AT
     from database import get_db
     db = get_db()
     try:
@@ -65,16 +68,26 @@ def _reload() -> None:
     _CACHE = new_cache
     _OVERRIDES_CACHE = new_overrides
     _CACHE_LOADED_AT = time.time()
+    _LAST_RELOAD_FAILURE_AT = 0.0
 
 
 def _ensure_loaded() -> None:
+    global _LAST_RELOAD_FAILURE_AT
+    now = time.time()
     expired = (time.time() - _CACHE_LOADED_AT) > _CACHE_TTL_SEC
-    if not _CACHE or expired:
-        try:
-            _reload()
-        except Exception:
-            # graceful: 캐시가 있으면 stale 사용, 없으면 caller 가 default 처리
-            pass
+    if _CACHE and not expired:
+        return
+    if (
+        _LAST_RELOAD_FAILURE_AT
+        and now - _LAST_RELOAD_FAILURE_AT < _RELOAD_FAILURE_BACKOFF_SEC
+    ):
+        return
+    try:
+        _reload()
+    except Exception:
+        # DB 장애 중 호출마다 재접속하면 요청 지연이 증폭된다. 짧은 유예 동안
+        # stale 캐시 또는 caller의 default를 사용하고 이후 다시 시도한다.
+        _LAST_RELOAD_FAILURE_AT = time.time()
 
 
 def get(name: str, default: float = 0.0,
@@ -133,6 +146,8 @@ def get_all() -> Dict[str, float]:
 def clear_cache() -> None:
     """테스트 격리용 — 다음 get() 호출 시 강제 reload."""
     global _CACHE, _OVERRIDES_CACHE, _CACHE_LOADED_AT
+    global _LAST_RELOAD_FAILURE_AT
     _CACHE = {}
     _OVERRIDES_CACHE = {}
     _CACHE_LOADED_AT = 0.0
+    _LAST_RELOAD_FAILURE_AT = 0.0

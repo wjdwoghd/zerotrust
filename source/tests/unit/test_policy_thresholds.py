@@ -96,6 +96,23 @@ class TestSeedValues:
 
 # ─── 2. 캐시 동작 ─────────────────────────────────────────────────
 class TestCacheBehavior:
+    def test_reload_failure_uses_short_retry_backoff(self, monkeypatch):
+        """DB 장애 중 임계값 조회마다 연결을 반복하지 않는다."""
+        pt.clear_cache()
+        attempts = 0
+
+        def fail_reload():
+            nonlocal attempts
+            attempts += 1
+            raise RuntimeError("database unavailable")
+
+        monkeypatch.setattr(pt, "_reload", fail_reload)
+
+        assert pt.get("ENV_NIGHT_TIME", 15) == 15
+        assert pt.get("ENV_NIGHT_TIME", 15) == 15
+        assert attempts == 1
+        pt.clear_cache()
+
     def test_get_returns_seed_value(self, db):
         pt.clear_cache()
         assert pt.get("ENV_NIGHT_TIME", 999) == 15
