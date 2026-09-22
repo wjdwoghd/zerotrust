@@ -128,13 +128,15 @@ jobs:
           retention-days: 14
 
   build:
-    name: Build versioned installer and draft release
+    name: Build installer and prepare release assets
     needs: test
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: windows-2022
     timeout-minutes: 45
     permissions:
       contents: write
+    env:
+      ZT_BUILD_VERSION: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('validation-{0}', github.run_id) }}
     defaults:
       run:
         shell: pwsh
@@ -171,13 +173,11 @@ jobs:
 
       - name: Prepare versioned assets and metadata
         run: |
-          $version = $env:GITHUB_REF_NAME
+          $version = $env:ZT_BUILD_VERSION
           $installer = 'source/dist/ZeroTrustDemoSetup.exe'
-          $asset = "source/dist/ZeroTrust-Setup-$version.exe"
           if (!(Test-Path $installer) -or (Get-Item $installer).Length -eq 0) { throw 'Installer is missing or empty.' }
-          Copy-Item -LiteralPath $installer -Destination $asset
-          $hash = (Get-FileHash -LiteralPath $asset -Algorithm SHA256).Hash
-          "$hash  $(Split-Path $asset -Leaf)" | Set-Content source/dist/SHA256SUMS.txt -Encoding utf8
+          $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash
+          "$hash  $(Split-Path $installer -Leaf)" | Set-Content source/dist/SHA256SUMS.txt -Encoding utf8
           $commit = git rev-parse HEAD
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           @(
@@ -203,9 +203,9 @@ jobs:
       - name: Retain assets if release upload needs retry
         uses: actions/upload-artifact@v4
         with:
-          name: installer-${{ github.ref_name }}
+          name: installer-${{ env.ZT_BUILD_VERSION }}
           path: |
-            source/dist/ZeroTrust-Setup-*.exe
+            source/dist/ZeroTrustDemoSetup.exe
             source/dist/SHA256SUMS.txt
             source/dist/BUILD-INFO.txt
             source/dist/DEPENDENCIES.txt
@@ -214,12 +214,13 @@ jobs:
           retention-days: 14
 
       - name: Create a new draft release without replacing existing releases
+        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
           gh release create "$env:GITHUB_REF_NAME" `
-            "source/dist/ZeroTrust-Setup-$env:GITHUB_REF_NAME.exe" `
+            source/dist/ZeroTrustDemoSetup.exe `
             source/dist/SHA256SUMS.txt source/dist/BUILD-INFO.txt source/dist/DEPENDENCIES.txt `
             --verify-tag --draft --title "ZeroTrust $env:GITHUB_REF_NAME" `
             --notes-file source/dist/RELEASE-NOTES.md
