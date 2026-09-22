@@ -114,17 +114,6 @@ def verify_totp_consume(secret: str, otp: str, *,
     return False, None
 
 
-# ─── §5-3 OPM-L3-01 호환 adapter ──────────────────────────────────
-def verify_otp(user_id: int, otp: str) -> bool:
-    """
-    스펙(§5-3 OPM-L3-01) 호환 어댑터.
-    명시적 secret 없이 호출되었으므로 항상 거부한다.
-    실제 OTP 검증은 반드시 `verify_totp(secret, otp)` 경로로 수행한다.
-    (auth_handler 가 user_devices.mfa_secret 을 조회해 이 경로로 호출함.)
-    """
-    return False
-
-
 def provisioning_uri(secret: str, username: str, issuer: str = "ZeroTrustCapstone") -> str:
     """authenticator 앱 등록용 otpauth:// URI. QR 코드 생성 보조."""
     if _HAS_PYOTP:

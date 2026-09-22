@@ -16,7 +16,7 @@ from security.mfa_service import generate_secret
 
 
 # ──────────────────────────────────────────────────────────────────
-# 리소스 시드 — seed() 와 refresh_resource_content() 가 공유하는 단일 소스.
+# 리소스 시드 — seed()가 사용하는 단일 소스.
 #
 # 튜플 포맷: (case_number, title, description, content,
 #             sensitivity_grade, data_type, department, requires_approval, job_tags)
@@ -575,49 +575,11 @@ _RESOURCE_SEED = [
 ]
 
 
-def refresh_resource_content():
-    """기존 DB 에 대해 resources.title/description/content 를 최신 시드로 덮어쓴다.
-
-    서버 부팅 시 호출해, 이미 DB 가 존재해도 최신의 1페이지 분량
-    본문이 자동 반영되도록 한다. 신규 case_number 가 추가된 경우 INSERT 도
-    수행한다. production 에서는 호출하지 않는다.
-    """
-    db = get_db()
-    try:
-        for row in _RESOURCE_SEED:
-            case_number, title, description, content, \
-                sens, data_type, dept, req_approval, job_tags = row
-            tags_json = json.dumps(job_tags or [], ensure_ascii=False)
-            existing = db.execute(
-                "SELECT id FROM resources WHERE case_number=?",
-                (case_number,)
-            ).fetchone()
-            if existing:
-                db.execute(
-                    "UPDATE resources SET title=?, description=?, content=?, "
-                    "sensitivity_grade=?, data_type=?, department=?, "
-                    "requires_approval=?, job_tags=? WHERE case_number=?",
-                    (title, description, content, sens, data_type, dept,
-                     bool(req_approval), tags_json, case_number)
-                )
-            else:
-                db.execute(
-                    "INSERT INTO resources "
-                    "(case_number, title, description, content, "
-                    " sensitivity_grade, data_type, department, "
-                    " requires_approval, job_tags) VALUES (?,?,?,?,?,?,?,?,?)",
-                    (case_number, title, description, content, sens,
-                     data_type, dept, bool(req_approval), tags_json)
-                )
-        db.commit()
-    finally:
-        try:
-            db.close()
-        except Exception:
-            pass
-
-
 def seed():
+    """합성 사용자·사건·기기 데이터를 빈 데이터베이스에 생성한다.
+
+    사용자가 이미 존재하면 시연 데이터를 덮어쓰지 않고 작업을 생략한다.
+    """
     db = get_db()
 
     # 기존 데이터 확인

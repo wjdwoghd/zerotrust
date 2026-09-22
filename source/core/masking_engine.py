@@ -17,7 +17,8 @@ MASKING_LEVELS = {
 
 
 def get_masking_level(decision_level: int) -> dict:
-    return MASKING_LEVELS.get(decision_level, MASKING_LEVELS[5])
+    """접근 결정 레벨에 대응하는 마스킹 정책 사본을 반환한다."""
+    return dict(MASKING_LEVELS.get(decision_level, MASKING_LEVELS[5]))
 
 
 def mask_name(name: str) -> str:

@@ -21,6 +21,7 @@ _EXTERNAL_STATUS_BY_LEVEL = {
 
 
 def external_status(level: int) -> str:
+    """내부 5단계 접근 레벨을 외부 공개용 3단계 상태로 변환한다."""
     return _EXTERNAL_STATUS_BY_LEVEL.get(level, "DENY")
 
 

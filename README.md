@@ -2,7 +2,7 @@
 
 > 사용자에게 한 번 부여한 권한을 계속 신뢰하지 않고, **누가·어떤 자료를·어느 환경에서·어떤 방식으로 요청하는지**를 매 접근마다 다시 평가하는 Zero Trust 기반 접근제어 데모입니다.
 
-[Windows 설치 파일 다운로드](https://github.com/wjdwoghd/zerotrust/releases/latest) · [소스 실행 안내](#소스에서-실행하기) · [시연 시나리오](source/PRESENTATION_DEMO.md)
+[Windows 설치 파일 다운로드](https://github.com/wjdwoghd/zerotrust/releases/latest) · [소스 실행 안내](#소스에서-실행하기) · [시연 시나리오](source/PRESENTATION_DEMO.md) · [설계 보고서](docs/REPORT.md) · [개발 규칙](CONTRIBUTING.md)
 
 ## 프로젝트 소개
 
@@ -200,7 +200,14 @@ Virtual Token Device (Tkinter)
 ```text
 zerotrust/
 ├─ README.md                     # 프로젝트 소개와 실행 안내
+├─ CONTRIBUTING.md               # 브랜치·코드·검증 규칙
 ├─ ZeroTrustDemoSetup.exe        # 로컬 배포본에 포함될 수 있는 Windows 설치 파일
+├─ docs/                         # 설계 보고서, 발표 자료, 정책표
+│  ├─ README.md                  # 문서 및 발표 자료 색인
+│  ├─ REPORT.md                  # 프로젝트 설계·구현 보고서
+│  ├─ CHANGELOG_ZT_TUNING.md     # Zero Trust 정책 조정 이력
+│  ├─ presentation/              # 최종 발표 자료와 포스터
+│  └─ reference/policy-tables/   # 정책·접근권한 표와 미리보기
 ├─ source/
 │  ├─ server.py                  # Tornado 애플리케이션 진입점과 라우팅
 │  ├─ config.py                  # 환경변수 및 보안·세션 정책
@@ -215,8 +222,7 @@ zerotrust/
 │  ├─ scripts/                   # 실행·초기화·테스트·관리 도구
 │  ├─ packaging/windows/         # Windows 설치 파일 빌드 도구
 │  └─ tests/                     # 단위·보안·시나리오 테스트
-├─ outputs/                      # 보고서/표 산출물
-└─ 포스터/                       # 발표 포스터와 자료
+└─ .gitignore                    # 비밀값·캐시·빌드 산출물 제외 규칙
 ```
 
 ## 프로젝트 진행 철칙
@@ -356,27 +362,29 @@ from database import get_db
 
 ## Git 협업 규칙
 
-현재 저장소는 `main`을 중심으로 운영하므로 불필요한 장기 `develop` 브랜치를 두지 않는 경량 전략을 사용합니다.
+현재 저장소는 안정 버전과 개선 작업을 분리하는 `main`/`develop` 전략을 사용합니다. 기능 추가·수정·개선·보완은 `develop`에서 `feat/<기능명>` 브랜치를 분기하고, 검증 후 다시 `develop`로 통합합니다.
 
 ```text
 main
-├─ feat/<feature-name>
-├─ fix/<bug-name>
-├─ docs/<document-name>
-├─ test/<test-name>
-└─ hotfix/<urgent-fix>
+├─ hotfix/<urgent-fix>
+└─ develop
+   ├─ feat/<feature-name>
+   ├─ docs/<document-name>
+   └─ test/<test-name>
 ```
 
 | 브랜치 | 용도 |
 |---|---|
 | `main` | 발표·배포 가능한 안정 상태 |
-| `feat/*` | 새로운 기능 |
-| `fix/*` | 일반 버그 수정 |
+| `develop` | 개선·보완 작업의 통합 브랜치 |
+| `feat/*` | 기능 추가·수정·개선·보완 |
 | `docs/*` | 문서 전용 변경 |
 | `test/*` | 테스트 보강 |
 | `hotfix/*` | 배포본의 긴급 보안·장애 수정 |
 
-- 작업 단위마다 짧은 브랜치를 만들고 완료 후 `main`으로 Pull Request를 보냅니다.
+- 작업 단위마다 `develop`에서 짧은 브랜치를 만들고 완료 후 `develop`으로 Pull Request를 보냅니다.
+- 배포 가능한 상태가 확인된 `develop`만 `main`으로 병합합니다.
+- 운영 장애나 긴급 보안 수정만 `main`에서 `hotfix/*`로 분기하고, 수정 후 `main`과 `develop` 양쪽에 반영합니다.
 - 한 Pull Request는 하나의 관심사만 다룹니다.
 - 공통 정책, 마이그레이션, 시드 페르소나 변경은 작업 전에 팀에 영향을 공유합니다.
 - 충돌이 발생한 보안 정책 코드는 한쪽 변경을 임의로 버리지 않고 의도를 비교해 해결합니다.

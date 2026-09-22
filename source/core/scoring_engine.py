@@ -46,6 +46,7 @@ def _data_type_bonus(data_type: str) -> float:
 
 
 def score_object_sensitivity(sensitivity_grade: int, data_type: str) -> dict:
+    """자료 등급과 유형을 정책 임계값에 따라 객체 민감도 점수로 변환한다."""
     base = _sens_base(sensitivity_grade)
     bonus = _data_type_bonus(data_type)
     total = base + bonus

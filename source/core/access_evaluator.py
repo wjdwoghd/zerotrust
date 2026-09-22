@@ -6,16 +6,18 @@ import json
 import logging
 import time
 import uuid
-from config import PRE_APPROVAL_TTL_SEC, REAUTH_TTL_SEC
 
-# ITEM 12: 진단 출력은 stderr 직접 print 대신 표준 logging 으로.
-_log = logging.getLogger(__name__)
+from config import PRE_APPROVAL_TTL_SEC, REAUTH_TTL_SEC
 from database import get_db, row_to_dict
 from core.scoring_engine import (
     score_object_sensitivity, score_environment_risk,
     score_behavior_risk, score_work_fitness, calculate_total_risk
 )
-from core.policy_engine import check_immediate_block, check_force_reauth, check_admin_approval_required
+from core.policy_engine import (
+    check_admin_approval_required,
+    check_force_reauth,
+    check_immediate_block,
+)
 from core.decision_engine import (
     determine_access_level, get_external_response,
     get_action_permissions,
@@ -25,6 +27,78 @@ from core.anomaly_service import detect_anomalies
 from core import travel_service
 from core.audit_events import AuditEvent, audit_log
 from core import break_glass as _bg
+
+
+# ITEM 12: 진단 출력은 stderr 직접 print 대신 표준 logging 으로.
+_log = logging.getLogger(__name__)
+
+
+def _calculate_scoring(*, user: dict, resource: dict,
+                       anomaly_result: dict, device_registered: bool,
+                       location_allowed: bool, is_assigned_case: bool,
+                       same_department: bool, job_relevance: bool,
+                       pre_approved: bool, unassigned_penalty_clicks: int,
+                       is_night: bool, hour: int | None) -> dict:
+    """접근 컨텍스트를 네 가지 점수 축과 최종 위험 점수로 변환한다.
+
+    현재 요청의 다운로드·복사 동작은 감사 대상으로만 취급하고 점수에는
+    이전까지 누적된 행동만 반영한다. 그래야 허용된 문서가 동작 요청 자체로
+    즉시 다른 접근 레벨로 바뀌는 자기모순을 피할 수 있다.
+    """
+    object_result = score_object_sensitivity(
+        resource["sensitivity_grade"],
+        resource.get("data_type", "summary"),
+    )
+    user_categories = (
+        user.get("job_scope")
+        if isinstance(user.get("job_scope"), list)
+        else None
+    )
+
+    relaxed_time = False
+    if hour is not None:
+        is_night = hour >= 22 or hour < 6
+        relaxed_time = not is_night and (6 <= hour < 9 or 18 <= hour < 22)
+
+    environment_result = score_environment_risk(
+        device_registered,
+        location_allowed,
+        is_night,
+        relaxed_time=relaxed_time,
+        user_categories=user_categories,
+    )
+    behavior_result = score_behavior_risk(
+        access_count_5min=anomaly_result.get("recent_access_count", 0),
+        download_attempt=False,
+        copy_attempt=False,
+        bulk_query="BULK_QUERY" in anomaly_result.get("anomaly_types", []),
+        unauthorized_access=not is_assigned_case,
+        high_sensitivity_unassigned=(
+            not is_assigned_case
+            and int(resource.get("sensitivity_grade", 1)) >= 4
+        ),
+        unassigned_click_count=unassigned_penalty_clicks,
+    )
+    fitness_result = score_work_fitness(
+        is_assigned_case=is_assigned_case,
+        same_department=same_department,
+        jurisdiction_match=same_department,
+        pre_approved=pre_approved,
+        job_relevance=job_relevance,
+    )
+    total_result = calculate_total_risk(
+        object_result["score"],
+        environment_result["score"],
+        behavior_result["score"],
+        fitness_result["score"],
+    )
+    return {
+        "object_sensitivity": object_result,
+        "environment_risk": environment_result,
+        "behavior_risk": behavior_result,
+        "work_fitness": fitness_result,
+        "total": total_result,
+    }
 
 
 def evaluate_access(user_id: int, resource_id: int, session_id: int = None,
@@ -176,49 +250,25 @@ def evaluate_access(user_id: int, resource_id: int, session_id: int = None,
 
     # ── 3단계: 4축 점수 산출 ──
     # 즉시차단 예외가 걸리더라도 총 위험점수 자체는 4축 계산값으로 남긴다.
-    obj_result = score_object_sensitivity(
-        resource["sensitivity_grade"], resource.get("data_type", "summary")
-    )
-    user_categories = user.get("job_scope") if isinstance(user.get("job_scope"), list) else None
-
-    is_relaxed = False
-    if hour is not None:
-        is_night = (hour >= 22 or hour < 6)
-        if not is_night:
-            is_relaxed = (6 <= hour < 9) or (18 <= hour < 22)
-
-    env_result = score_environment_risk(
-        device_registered, location_allowed, is_night,
-        relaxed_time=is_relaxed,
-        user_categories=user_categories,
-    )
-    beh_result = score_behavior_risk(
-        access_count_5min=anomaly_result.get("recent_access_count", 0),
-        download_attempt=False,
-        copy_attempt=False,
-        bulk_query=("BULK_QUERY" in anomaly_result.get("anomaly_types", [])),
-        unauthorized_access=not is_assigned_case,
-        high_sensitivity_unassigned=(not is_assigned_case and int(resource.get("sensitivity_grade", 1)) >= 4),
-        unassigned_click_count=unassigned_penalty_clicks,
-    )
-    fit_result = score_work_fitness(
+    scoring = _calculate_scoring(
+        user=user,
+        resource=resource,
+        anomaly_result=anomaly_result,
+        device_registered=device_registered,
+        location_allowed=location_allowed,
         is_assigned_case=is_assigned_case,
         same_department=same_department,
-        jurisdiction_match=same_department,
-        pre_approved=pre_approved,
         job_relevance=job_relevance,
+        pre_approved=pre_approved,
+        unassigned_penalty_clicks=unassigned_penalty_clicks,
+        is_night=is_night,
+        hour=hour,
     )
-    total_result = calculate_total_risk(
-        obj_result["score"], env_result["score"],
-        beh_result["score"], fit_result["score"]
-    )
-    scoring = {
-        "object_sensitivity": obj_result,
-        "environment_risk": env_result,
-        "behavior_risk": beh_result,
-        "work_fitness": fit_result,
-        "total": total_result,
-    }
+    obj_result = scoring["object_sensitivity"]
+    env_result = scoring["environment_risk"]
+    beh_result = scoring["behavior_risk"]
+    fit_result = scoring["work_fitness"]
+    total_result = scoring["total"]
 
     block_result = check_immediate_block(policy_context)
     if block_result["blocked"]:
@@ -339,65 +389,6 @@ def evaluate_access(user_id: int, resource_id: int, session_id: int = None,
         return _build_response(request_id, decision, scoring, block_result,
                                anomaly_result, masked_resource,
                                include_resource_body=include_resource_body)
-
-    # ── 3단계: 4축 점수 산출 ──
-    obj_result = score_object_sensitivity(
-        resource["sensitivity_grade"], resource.get("data_type", "summary")
-    )
-    # 016: 사용자 job_scope 를 user_categories 로 전달해 부서별 multiplier 적용
-    user_categories = user.get("job_scope") if isinstance(user.get("job_scope"), list) else None
-
-    # 시간대 분류 — hour 가 명시되면 우선 사용 (시뮬 패널 X-Sim-Hour 헤더
-    # 또는 호출자가 직접 지정). 그 외에는 is_night 만 받던 구버전 호환.
-    #   심야: 22~06    → ENV_NIGHT_TIME (+15)
-    #   추가 근무: 06~09 / 18~22 → ENV_RELAXED_TIME (+5)
-    #   근무: 09~18    → 가산 0
-    is_relaxed = False
-    if hour is not None:
-        is_night = (hour >= 22 or hour < 6)
-        if not is_night:
-            is_relaxed = (6 <= hour < 9) or (18 <= hour < 22)
-
-    env_result = score_environment_risk(
-        device_registered, location_allowed, is_night,
-        relaxed_time=is_relaxed,
-        user_categories=user_categories,
-    )
-    beh_result = score_behavior_risk(
-        access_count_5min=anomaly_result.get("recent_access_count", 0),
-        # 현재 요청의 download/copy 클릭은 그 자체로 감사·이상행동 로그에는
-        # 남지만, 권한 결정 점수에는 "이전까지 누적된 상태" 만 반영한다.
-        # 그렇지 않으면 L1 로 표시된 문서가 다운로드 요청 순간 자체 가산점
-        # 때문에 L2 로 뒤집혀 점수-레벨-행동권한이 자기모순을 일으킨다.
-        download_attempt=False,
-        copy_attempt=False,
-        bulk_query=("BULK_QUERY" in anomaly_result.get("anomaly_types", [])),
-        unauthorized_access=not is_assigned_case,
-        high_sensitivity_unassigned=(not is_assigned_case and int(resource.get("sensitivity_grade", 1)) >= 4),
-        unassigned_click_count=unassigned_penalty_clicks,
-    )
-    # 보고서 §7-3 Table 21: 직무 연관성(-20)은 위에서 계산한 job_relevance
-    # (users.job_scope ∩ resources.job_tags) 값을 그대로 전달한다.
-    fit_result = score_work_fitness(
-        is_assigned_case=is_assigned_case,
-        same_department=same_department,
-        jurisdiction_match=same_department,
-        pre_approved=pre_approved,
-        job_relevance=job_relevance,
-    )
-
-    total_result = calculate_total_risk(
-        obj_result["score"], env_result["score"],
-        beh_result["score"], fit_result["score"]
-    )
-
-    scoring = {
-        "object_sensitivity": obj_result,
-        "environment_risk": env_result,
-        "behavior_risk": beh_result,
-        "work_fitness": fit_result,
-        "total": total_result,
-    }
 
     # ── 4단계: 강제 재인증 검사 ──
     reauth_result = check_force_reauth(policy_context)

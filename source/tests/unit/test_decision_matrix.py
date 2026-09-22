@@ -61,16 +61,16 @@ NORMAL_TRUSTED = [
 ENVIRONMENT_RISK = [
     ("trusted_user_at_night",
      {"resource_sensitivity": 3, "hour_of_day": 2, "device_trust": "corporate_mdm",
-      "location_allowed": True, "is_assigned_case": True}, 1, 1),
+      "location_allowed": True, "is_assigned_case": True}, 2, 2),
     ("trusted_user_unallowed_location",
      {"resource_sensitivity": 3, "hour_of_day": 14, "device_trust": "corporate_mdm",
-      "location_allowed": False, "is_assigned_case": True}, 1, 1),
+      "location_allowed": False, "is_assigned_case": True}, 2, 2),
     ("trusted_user_unknown_device",
      {"resource_sensitivity": 3, "hour_of_day": 14, "device_trust": "unknown",
-      "location_allowed": True, "is_assigned_case": True}, 1, 1),
+      "location_allowed": True, "is_assigned_case": True}, 2, 2),
     ("night_high_sens_unallowed_loc",
      {"resource_sensitivity": 4, "hour_of_day": 2, "device_trust": "corporate_mdm",
-      "location_allowed": False, "is_assigned_case": True}, 2, 2),
+      "location_allowed": False, "is_assigned_case": True}, 3, 3),
 ]
 
 
@@ -96,10 +96,10 @@ BEHAVIOR_RISK = [
       "location_allowed": True, "is_assigned_case": True}, 1, 2),
     ("download_attempt_mid_sens",
      {"resource_sensitivity": 3, "hour_of_day": 14, "device_trust": "corporate_mdm",
-      "location_allowed": True, "is_assigned_case": True, "download_attempt": True}, 1, 1),
+      "location_allowed": True, "is_assigned_case": True, "download_attempt": True}, 2, 2),
     ("bulk_query_anomaly",
      {"resource_sensitivity": 3, "hour_of_day": 14, "device_trust": "corporate_mdm",
-      "location_allowed": True, "is_assigned_case": True, "bulk_query": True}, 1, 1),
+      "location_allowed": True, "is_assigned_case": True, "bulk_query": True}, 2, 2),
     ("high_recent_downloads",
      {"resource_sensitivity": 3, "hour_of_day": 14, "device_trust": "corporate_mdm",
       "location_allowed": True, "is_assigned_case": True, "recent_downloads": 50}, 3, 4),
@@ -120,7 +120,7 @@ HIGH_RISK_COMBINATIONS = [
     ("byod_at_night_high_sens_download",
      {"resource_sensitivity": 4, "hour_of_day": 2, "device_trust": "byod",
       "location_allowed": True, "is_assigned_case": True,
-      "download_attempt": True}, 2, 2),
+      "download_attempt": True}, 3, 3),
 ]
 
 

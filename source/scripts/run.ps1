@@ -47,6 +47,13 @@ try {
 
         # 첫 번째 인자(test) 제외하고 나머지를 pytest 에 그대로 전달
         $pytestArgs = $args | Select-Object -Skip 1
+
+        & python scripts\check_code_conventions.py
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[run:test] code convention check failed."
+            exit 1
+        }
+
         $cmd = @("-m", "pytest", "tests/") + $pytestArgs
         & python @cmd
         exit $LASTEXITCODE

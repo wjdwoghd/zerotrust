@@ -212,6 +212,7 @@ def _graceful_shutdown(signum, frame):  # noqa: ARG001
 
 # ─── 앱 생성 ──────────────────────────────────────────────────────
 def make_app() -> tornado.web.Application:
+    """비밀 설정과 기존 세션을 검증한 뒤 Tornado 애플리케이션을 생성한다."""
     # 1) 비밀 검증 — 약한 SECRET_KEY / 비-PG URL 이면 여기서 중단
     try:
         load_and_validate()

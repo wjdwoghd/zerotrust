@@ -132,16 +132,6 @@ EXTERNAL_MESSAGES = {
 
 
 # ─── 확신도 산출 ─────────────────────────────────────────────────
-# CONFIDENCE_THRESHOLD 는 015 마이그레이션으로 외부화됐다 (policy_thresholds).
-# 아래는 default — DB miss 시 fallback 으로만 사용.
-CONFIDENCE_THRESHOLD = 0.85   # default: 이 이하면 한 단계 조정
-
-
-def _confidence_threshold() -> float:
-    """현재 적용 중인 confidence 임계값. 외부화된 값 우선."""
-    return _pt.get("CONFIDENCE_THRESHOLD", CONFIDENCE_THRESHOLD)
-
-
 _BAND_BOUNDARY_MARGIN = 5.0   # 점수 단위. 경계 ±5 안이면 boundary effect 발동
 _AXES_DISAGREEMENT_THRESHOLD = 25.0  # 4축 std 가 이 이상이면 축 불일치 페널티
 _ANOMALY_PENALTY_PER_HIT = 0.15
@@ -205,21 +195,6 @@ def compute_confidence(*, risk_score: float, axes_values=None,
     return max(0.0, min(1.0, score))
 
 
-def _adjust_level_for_confidence(level: int, confidence: float) -> int:
-    """
-    확신이 부족한 경우 level 을 검증 방향으로 한 단계 이동.
-    임계값은 외부화(policy_thresholds.CONFIDENCE_THRESHOLD)되어 있어 운영 중
-    조정 가능. 기본 0.85.
-    """
-    if confidence >= _confidence_threshold():
-        return level
-    if level >= 4:
-        return level - 1   # DENY/ADMIN → 한 단계 완화
-    if level <= 2:
-        return level + 1   # ALLOW/VIEW_ONLY → 한 단계 강화
-    return level           # level == 3 (재인증) 은 그대로 — 이미 검증 단계
-
-
 # ─── 결정 산출 ───────────────────────────────────────────────────
 def determine_access_level(risk_score: float, sensitivity_grade: int,
                            *, confidence: float = 1.0) -> dict:
@@ -234,8 +209,7 @@ def determine_access_level(risk_score: float, sensitivity_grade: int,
         1~5 자원 민감도 (현 정책에서 등급 차등은 scoring 단계에서 처리되므로
         결정 단계에서는 동일 매핑 적용 — UI 표 일치 목적).
     confidence :
-        결정 확신도 [0,1]. 1.0 이면 base level 그대로, < 0.85 면 검증 방향
-        한 단계 이동.
+        결정 확신도 [0,1]. 진단 정보로만 반환하며 접근 레벨을 변경하지 않는다.
 
     Returns
     -------
