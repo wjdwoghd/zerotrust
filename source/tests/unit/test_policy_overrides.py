@@ -1,9 +1,9 @@
 """
-016 마이그레이션 — 부서별 정책 multiplier 회귀 테스트.
+016/023 마이그레이션 — 현재 시드 정책과 범용 multiplier 동작의 회귀 테스트.
 
 검증:
   1) override 시드 row 정확히 입력
-  2) 매칭 카테고리 사용자에게 multiplier 적용 (예: violent_crime 야간 0.5)
+  2) 023 이후 수사 직무도 야간 기본 위험도 전부 적용
   3) 카테고리 미매칭이면 base 임계값 그대로
   4) 여러 카테고리 매칭 시 가장 작은 multiplier (사용자 유리한 쪽)
   5) score_environment_risk 가 user_categories 를 받아 결과에 반영
@@ -11,19 +11,22 @@
 """
 from __future__ import annotations
 
+import pytest
+
 from core import policy_thresholds as pt
 from core import scoring_engine as se
 
 
 class TestOverrideSeed:
-    def test_violent_crime_night_half(self, db):
+    @pytest.mark.parametrize("category", ["violent_crime", "organized_crime", "national_security"])
+    def test_night_seed_uses_full_risk(self, db, category):
         row = db.execute(
             "SELECT multiplier FROM policy_overrides "
             "WHERE job_category=? AND threshold_name=?",
-            ("violent_crime", "ENV_NIGHT_TIME"),
+            (category, "ENV_NIGHT_TIME"),
         ).fetchone()
         assert row is not None
-        assert float(row["multiplier"]) == 0.5
+        assert float(row["multiplier"]) == 1.0
 
     def test_audit_long_unused_strict(self, db):
         row = db.execute(
@@ -42,11 +45,12 @@ class TestMultiplierApplication:
         v = pt.get("ENV_NIGHT_TIME", 0)
         assert v == 15
 
-    def test_violent_crime_user_gets_half(self, db):
+    @pytest.mark.parametrize("category", ["violent_crime", "organized_crime", "national_security"])
+    def test_night_category_keeps_full_risk(self, db, category):
         pt.clear_cache()
-        # violent_crime job_scope → 0.5 * 15 = 7.5
-        v = pt.get("ENV_NIGHT_TIME", 0, categories=["violent_crime"])
-        assert v == 7.5
+        # 023: 직무와 무관하게 1.0 * 15 = 15.
+        v = pt.get("ENV_NIGHT_TIME", 0, categories=[category])
+        assert v == 15
 
     def test_unmatched_category_keeps_base(self, db):
         pt.clear_cache()
@@ -55,10 +59,16 @@ class TestMultiplierApplication:
         assert v == 15
 
     def test_multiple_matches_use_smallest_multiplier(self, db):
+        # 시드 정책을 바꾸지 않고 별도 테스트 범주로 범용 선택 규칙을 검증한다.
+        db.executemany(
+            "INSERT INTO policy_overrides (job_category, threshold_name, multiplier, reason) "
+            "VALUES (?, 'ENV_NIGHT_TIME', ?, 'test only')",
+            [("test_night_a", 0.8), ("test_night_b", 0.5)],
+        )
+        db.commit()
         pt.clear_cache()
-        # violent_crime(0.5) + organized_crime(0.5) → 0.5 (가장 관대)
         v = pt.get("ENV_NIGHT_TIME", 0,
-                   categories=["violent_crime", "organized_crime"])
+                   categories=["test_night_a", "test_night_b"])
         assert v == 7.5
 
     def test_audit_category_amplifies(self, db):
@@ -69,40 +79,46 @@ class TestMultiplierApplication:
 
     def test_get_multiplier_helper(self, db):
         pt.clear_cache()
-        assert pt.get_multiplier("violent_crime", "ENV_NIGHT_TIME") == 0.5
+        assert pt.get_multiplier("violent_crime", "ENV_NIGHT_TIME") == 1.0
         assert pt.get_multiplier("traffic", "ENV_NIGHT_TIME") is None
 
 
 class TestScoringEngineIntegration:
-    def test_violent_crime_user_night_half_penalty(self, db):
-        """violent_crime 카테고리 사용자의 야간 환경 점수 = 절반."""
+    @pytest.mark.parametrize("category", ["violent_crime", "organized_crime", "national_security"])
+    def test_night_penalty_is_full_for_all_seed_categories(self, db, category):
+        """023 정책: 수사 직무도 야간 환경 점수는 기본 15점."""
         pt.clear_cache()
         # 일반 사용자 (categories 없음)
         normal = se.score_environment_risk(
             device_registered=True, location_allowed=True, is_night=True,
         )
-        # violent_crime 사용자
+        # 수사 직무 사용자
         violent = se.score_environment_risk(
             device_registered=True, location_allowed=True, is_night=True,
-            user_categories=["violent_crime"],
+            user_categories=[category],
         )
         assert normal["score"] == 15
-        assert violent["score"] == 7.5
-        assert violent["score"] < normal["score"]
+        assert violent["score"] == normal["score"]
 
     def test_evaluate_picks_up_job_scope_from_context(self, db):
         """evaluate(context) 가 context.job_scope 를 자동으로 multiplier 에 반영."""
+        # 현재 시드의 야간 예외는 모두 1.0이므로 별도 범주로 전달 경로를 확인한다.
+        db.execute(
+            "INSERT INTO policy_overrides (job_category, threshold_name, multiplier, reason) "
+            "VALUES ('test_night_policy', 'ENV_NIGHT_TIME', 0.5, 'test only')"
+        )
+        db.commit()
         pt.clear_cache()
         # 일반 사용자 야간 접근: env=15
         normal = se.evaluate({
             "resource_sensitivity": 3, "hour_of_day": 2,
             "location_allowed": True, "device_trust": "corporate_mdm",
         })
-        # violent_crime 카테고리 야간 접근: env=7.5
+        # 테스트 범주 야간 접근: env=7.5
         with_job = se.evaluate({
             "resource_sensitivity": 3, "hour_of_day": 2,
             "location_allowed": True, "device_trust": "corporate_mdm",
-            "job_scope": ["violent_crime"],
+            "job_scope": ["test_night_policy"],
         })
         assert with_job["axes"]["environment"] < normal["axes"]["environment"]
         assert with_job["axes"]["environment"] == 7.5

@@ -1,6 +1,6 @@
 # ZeroTrust 개발 규칙
 
-이 문서는 사람과 자동화 도구가 함께 따르는 단일 개발 규칙입니다. 세부 기능과 실행 방법은 [README](README.md), 설계 근거는 [REPORT](docs/REPORT.md)를 참고합니다.
+이 문서는 브랜치 운영과 코드 작성·검증 기준입니다. 공통 작업 지침은 [AGENTS.md](AGENTS.md), 현재 정책과 미확정 사항은 [POLICY](docs/POLICY.md), 설계 근거는 [REPORT](docs/REPORT.md)를 참고합니다.
 
 ## 브랜치 운영
 
@@ -66,10 +66,12 @@ python scripts\check_code_conventions.py
 
 ## 커밋과 원격 반영
 
-커밋 제목은 `feat`, `fix`, `refactor`, `docs`, `test`, `build`, `chore` 등의 접두어와 변경 목적을 조합합니다.
+커밋 제목은 `유형(영역): 변경 내용` 형식을 사용합니다. 유형은 `feat`, `fix`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`입니다.
 
 ```text
-refactor: 미사용 정책 호환 코드와 중간 산출물 정리
+refactor(core): 미사용 정책 호환 코드 정리
 ```
 
 자동화 도구는 사용자가 명시적으로 요청한 경우에만 커밋하거나 푸시합니다.
+
+버전 태그는 `main`에 반영된 검증 대상 커밋에 붙입니다. 배포 자동화와 설치 검증 절차는 [RELEASE](docs/RELEASE.md)를 따릅니다. 기존 태그·Release·설치 파일은 새 버전 배포 시 덮어쓰지 않습니다.
