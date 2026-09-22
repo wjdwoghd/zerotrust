@@ -17,6 +17,26 @@ from core import policy_thresholds as pt
 from core import scoring_engine as se
 
 
+@pytest.fixture
+def test_night_overrides(db):
+    """테스트 전용 배율 행과 캐시를 정리해 같은 DB에서 재실행을 보장한다."""
+    def cleanup():
+        db.rollback()
+        db.execute(
+            "DELETE FROM policy_overrides WHERE threshold_name=? "
+            "AND job_category IN (?, ?, ?)",
+            ("ENV_NIGHT_TIME", "test_night_a", "test_night_b", "test_night_policy"),
+        )
+        db.commit()
+        pt.clear_cache()
+
+    cleanup()
+    try:
+        yield
+    finally:
+        cleanup()
+
+
 class TestOverrideSeed:
     @pytest.mark.parametrize("category", ["violent_crime", "organized_crime", "national_security"])
     def test_night_seed_uses_full_risk(self, db, category):
@@ -58,7 +78,7 @@ class TestMultiplierApplication:
         v = pt.get("ENV_NIGHT_TIME", 0, categories=["traffic"])
         assert v == 15
 
-    def test_multiple_matches_use_smallest_multiplier(self, db):
+    def test_multiple_matches_use_smallest_multiplier(self, db, test_night_overrides):
         # 시드 정책을 바꾸지 않고 별도 테스트 범주로 범용 선택 규칙을 검증한다.
         db.executemany(
             "INSERT INTO policy_overrides (job_category, threshold_name, multiplier, reason) "
@@ -100,7 +120,7 @@ class TestScoringEngineIntegration:
         assert normal["score"] == 15
         assert violent["score"] == normal["score"]
 
-    def test_evaluate_picks_up_job_scope_from_context(self, db):
+    def test_evaluate_picks_up_job_scope_from_context(self, db, test_night_overrides):
         """evaluate(context) 가 context.job_scope 를 자동으로 multiplier 에 반영."""
         # 현재 시드의 야간 예외는 모두 1.0이므로 별도 범주로 전달 경로를 확인한다.
         db.execute(
