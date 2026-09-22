@@ -45,13 +45,13 @@ def test_admin_login_approval_expires_at_consistent(http, login_as, db):
         "POST", "/api/auth/login",
         body={
             "username": "patrol_jung", "password": "password123",
-            "device_id": "registered-007", "location": "본청",
+            "device_id": "registered-007", "location": "은평서",
         },
         device="registered-007",
     )
-    # admin_approval_required (403) 응답이 정상
-    if code != 403:
-        pytest.skip(f"admin gate 미발동: {code} {data}")
+    # 시드의 허용 위치에서 승인 게이트까지 도달해야 TTL을 검증할 수 있다.
+    assert code == 403, f"admin gate 미발동: {code} {data}"
+    assert data.get("code") == "admin_approval_required", data
 
     # 가장 최근 pending 요청 찾기
     target = db.execute(
@@ -60,8 +60,7 @@ def test_admin_login_approval_expires_at_consistent(http, login_as, db):
         "  AND status='pending' "
         "ORDER BY id DESC LIMIT 1"
     ).fetchone()
-    if not target:
-        pytest.skip("login_approval_requests pending 행이 없음")
+    assert target, "login_approval_requests pending 행이 없음"
     req_id = target["id"]
 
     # admin 으로 승인
