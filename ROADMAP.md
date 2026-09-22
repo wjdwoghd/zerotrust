@@ -1,6 +1,6 @@
 # 작업 계획
 
-## v1.0.1 릴리스 검증 — 진행 중
+## v1.0.1 릴리스 검증 — 설치 검증 대기
 
 목표: `main`에 포함된 새 버전 태그를 기준으로 격리된 PostgreSQL 테스트,
 Windows 설치 파일 빌드, GitHub Release 초안 생성을 연결한다.
@@ -22,7 +22,7 @@ Windows 설치 파일 빌드, GitHub Release 초안 생성을 연결한다.
 - 작업 브랜치: `ci/release-v1.0.1` (origin/develop에서 분기).
 - 기존 main Actions: [35686506028](https://github.com/wjdwoghd/zerotrust/actions/runs/35686506028)
   테스트 성공, installer job은 태그 실행이 아니므로 미실행.
-- 테스트 보강 브랜치: `test/release-validation` (`bb223cd`). 목표와 완료 조건은
+- 테스트 보강 브랜치: `test/release-validation` (`bb223cd`, `c312671`). 목표와 완료 조건은
   로그인 승인 TTL 테스트가 시드의 허용 위치에서 승인 요청을 만들고 만료를
   실제 검증하는 것. 잘못된 위치 입력을 수정하고 skip을 assertion으로 교체.
 - 2026-09-22 로컬 검증: Python 3.12.10, 고정 Python 의존성, PostgreSQL 18.6.
@@ -44,7 +44,12 @@ Windows 설치 파일 빌드, GitHub Release 초안 생성을 연결한다.
 - 사전 Actions: [35692306968](https://github.com/wjdwoghd/zerotrust/actions/runs/35692306968),
   테스트·Windows installer 빌드·메타데이터 생성·artifact 업로드 성공.
   수동 실행의 Release 단계는 생략됐음을 확인.
-- develop/main 통합 후 회귀: 검증 대기.
+- develop 통합: `7064699`. 통합 후 전체 회귀는
+  [Actions 35693532608](https://github.com/wjdwoghd/zerotrust/actions/runs/35693532608)에서 실행.
+  이후 문서 기록 반영을 포함한 최종 통합 커밋의 결과는
+  [develop Actions](https://github.com/wjdwoghd/zerotrust/actions/workflows/release.yml?query=branch%3Adevelop)와
+  [main Actions](https://github.com/wjdwoghd/zerotrust/actions/workflows/release.yml?query=branch%3Amain)에서
+  커밋별로 확인한다. develop 성공 후 main 반영, main 전체 회귀 성공을 순서대로 확인한다.
 - v1.0.1 태그 및 Release 생성: 보류. 모든 검증 후 태그를 생성한다는
   작업 조건에 따라 깨끗한 Windows 설치 확인 전에는 태그를 만들지 않는다.
 - 깨끗한 Windows 환경에서 설치·바로가기·로그인/OTP·서버 종료: 검증 대기.
