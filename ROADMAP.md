@@ -32,7 +32,8 @@ Windows 설치 파일 빌드, GitHub Release 초안 생성을 연결한다.
   전체 반복 실행에서 테스트 전용 배율 행 잔류로 2 failed / 222 passed 확인.
   테스트 전용 행·캐시 정리를 추가한 뒤 관련 19개 테스트를 같은 DB에서
   두 번 실행해 모두 통과, 전용 행 0건과 기존 시드 배율 보존 확인.
-  전체 테스트는 재검증 중.
+  수정 후 전체 `scripts/run.bat test -q -ra --show-capture=no`:
+  **224 passed / 0 skipped**, 283.84초. 기존 utcnow 폐기 예정 경고 333건.
 - 코드 규칙 검사(70 Python 파일), pip check, actionlint 1.7.12,
   workflow 내 PowerShell 14개 단계 구문 검사 통과.
   정상 버전 4종·잘못된 태그 4종, main 미포함 커밋 거부 확인.
@@ -43,7 +44,9 @@ Windows 설치 파일 빌드, GitHub Release 초안 생성을 연결한다.
 - 사전 Actions: [35692306968](https://github.com/wjdwoghd/zerotrust/actions/runs/35692306968),
   테스트·Windows installer 빌드·메타데이터 생성·artifact 업로드 성공.
   수동 실행의 Release 단계는 생략됐음을 확인.
-- develop/main 통합 후 회귀, v1.0.1 태그 및 Release 생성: 검증 대기.
+- develop/main 통합 후 회귀: 검증 대기.
+- v1.0.1 태그 및 Release 생성: 보류. 모든 검증 후 태그를 생성한다는
+  작업 조건에 따라 깨끗한 Windows 설치 확인 전에는 태그를 만들지 않는다.
 - 깨끗한 Windows 환경에서 설치·바로가기·로그인/OTP·서버 종료: 검증 대기.
   현 환경에 Windows Sandbox 없음. 빌드 성공을 설치 성공으로 간주하지 않음.
 
