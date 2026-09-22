@@ -22,7 +22,26 @@ Windows 설치 파일 빌드, GitHub Release 초안 생성을 연결한다.
 - 작업 브랜치: `ci/release-v1.0.1` (origin/develop에서 분기).
 - 기존 main Actions: [35686506028](https://github.com/wjdwoghd/zerotrust/actions/runs/35686506028)
   테스트 성공, installer job은 태그 실행이 아니므로 미실행.
-- 새 변경의 전체 테스트·installer 빌드·Actions·깨끗한 Windows 설치: 검증 대기.
+- 테스트 보강 브랜치: `test/release-validation` (`bb223cd`). 목표와 완료 조건은
+  로그인 승인 TTL 테스트가 시드의 허용 위치에서 승인 요청을 만들고 만료를
+  실제 검증하는 것. 잘못된 위치 입력을 수정하고 skip을 assertion으로 교체.
+- 2026-09-22 로컬 검증: Python 3.12.10, 고정 Python 의존성, PostgreSQL 18.6.
+  새 전용 클러스터 `127.0.0.1:55439/zerotrust_test` 사용.
+  `scripts/run.bat test -q -ra` 최초 결과 223 passed / 1 skipped.
+  누락 검증 수정 후 `scripts/run.bat test -q -ra -k session_lifecycle`: 3 passed.
+  수정 후 전체 테스트는 재검증 중.
+- 코드 규칙 검사(70 Python 파일), pip check, actionlint 1.7.12,
+  workflow 내 PowerShell 14개 단계 구문 검사 통과.
+  정상 버전 4종·잘못된 태그 4종, main 미포함 커밋 거부 확인.
+- 테스트 DB에서 `python scripts/run_migrations.py`: applied=0, 재적용 없음.
+- 공식 installer 빌드 성공: `source/dist/ZeroTrustDemoSetup.exe`, 94,711,808 bytes.
+  번들 Python import, SHA-256, 필수 런타임 포함, .env·생성 토큰 런처 제외 확인.
+  workflow의 실제 metadata 단계로 체크섬·빌드 정보·의존성 목록 생성 확인.
+- 사전 Actions: [35692306968](https://github.com/wjdwoghd/zerotrust/actions/runs/35692306968),
+  테스트 성공, Windows installer 빌드 검증 중. 수동 실행의 Release 단계는 생략.
+- develop/main 통합 후 회귀, v1.0.1 태그 및 Release 생성: 검증 대기.
+- 깨끗한 Windows 환경에서 설치·바로가기·로그인/OTP·서버 종료: 검증 대기.
+  현 환경에 Windows Sandbox 없음. 빌드 성공을 설치 성공으로 간주하지 않음.
 
 ## 후속 정책 정합성 — 미착수
 
