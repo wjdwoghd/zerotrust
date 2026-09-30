@@ -3,30 +3,18 @@ from __future__ import annotations
 
 import json
 
-from core.decision_engine import get_action_permissions, get_score_band_for_level
+from core.decision_engine import get_action_permissions
 from security.mfa_service import generate_secret, generate_totp
 
 
 def _assert_consistent(payload: dict) -> None:
     decision = payload.get("decision") or {}
     resource = payload.get("resource") or {}
-    scoring = payload.get("scoring") or {}
     level = int(decision.get("level", 5) or 5)
-    score_level = int(decision.get("score_level", level) or level)
-    override = decision.get("override")
     expected_permissions = get_action_permissions(level)
-
-    score = float(decision.get("display_risk_score", decision.get("risk_score", 0)) or 0)
-    lo, hi = get_score_band_for_level(score_level)
-    assert lo <= score <= hi, (
-        f"score-level mismatch: score_level={score_level}, score={score}, band=({lo}, {hi}), "
-        f"decision={decision}"
-    )
-    assert float(decision.get("risk_score", score)) == score
-    assert decision.get("display_risk_score") == score
-    if not override:
-        assert level == score_level, f"non-override level mismatch: {decision}"
-
+    assert "scoring" not in payload
+    assert "risk_score" not in decision
+    assert "override" not in decision
     assert decision.get("action_permissions") == expected_permissions
     for key, expected in expected_permissions.items():
         assert decision.get(key) is expected, f"decision {key} mismatch: {decision}"
@@ -36,12 +24,9 @@ def _assert_consistent(payload: dict) -> None:
     if resource:
         assert int(resource.get("masking_level", level) or level) == level
 
-    total = scoring.get("total") or {}
-    if total:
-        assert float(total.get("total_risk_score", score)) == score
-        assert int(total.get("score_level", score_level) or score_level) == score_level
-        assert int(total.get("decision_level", level) or level) == level
-        assert total.get("action_permissions") == expected_permissions
+    if not decision.get("can_view"):
+        assert "content" not in resource
+        assert "description" not in resource
 
 
 def _assign_case(db, username: str, resource_id: int) -> None:
@@ -103,7 +88,7 @@ def test_level1_assigned_resource_allows_file_download(http, login_as, db):
 
 
 def test_realtime_status_moves_permissions_with_dynamic_score(http, login_as, db):
-    """동적 점수 변화에도 status 의 점수/레벨/행동권한은 한 매트릭스를 따라야."""
+    """동적 위험 변화 후에도 status 권한은 결정 레벨과 일치해야 한다."""
     tok, code, data = login_as("officer_choi")
     assert code == 200, data
 
@@ -140,7 +125,7 @@ def test_realtime_status_moves_permissions_with_dynamic_score(http, login_as, db
 
 
 def test_all_seed_accounts_all_documents_have_consistent_status(http, login_as, db):
-    """7개 시드 계정 x 전체 문서의 표시점수/레벨/행동권한 밴드 일치."""
+    """7개 시드 계정 x 전체 문서의 공개 권한과 레벨 일치."""
     accounts = {
         "detective_kim": "registered-001",
         "investigator_park": "registered-003",

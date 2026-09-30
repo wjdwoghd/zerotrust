@@ -1966,10 +1966,7 @@
                                         </div>
 
                                         <div className="text-sm text-slate-600 space-y-2">
-                                            <p className={masked ? 'blur-strong' : ''}>사건번호: <span className="text-slate-700">{caseItem.case_number}</span></p>
-                                            <p className={masked ? 'blur-strong' : ''}>자료유형: <span className="text-slate-700">{caseItem.data_type}</span></p>
-                                            <p className={masked ? 'blur-strong' : ''}>부서: <span className="text-slate-700">{caseItem.department}</span></p>
-                                            <p className={`text-sm leading-relaxed ${masked ? 'blur-strong' : 'text-slate-500'}`}>{caseItem.description || '설명 없음'}</p>
+                                            <p className="text-sm text-slate-500">상세 정보는 접근 평가 후 표시됩니다.</p>
                                         </div>
 
                                         {masked && (
@@ -2260,10 +2257,10 @@
                             return {
                                 ...prev,
                                 decision: data.decision || prev.decision,
-                                scoring: data.scoring || prev.scoring,
-                                resource: data.resource
+                                scoring: null,
+                                resource: data.decision?.can_view && prev.decision?.can_view
                                     ? { ...prev.resource, ...data.resource }
-                                    : prev.resource,
+                                    : (data.resource || {}),
                                 external_message: '',
                                 policy_check: null,
                                 anomaly_check: null,
@@ -2278,6 +2275,13 @@
                 const id = setInterval(refreshAccessStatus, 3000);
                 return () => { cancelled = true; clearInterval(id); };
             }, [auth.token, caseId, sim.deviceId, sim.location, sim.simHour]);
+
+            // 상태 폴링은 본문을 반환하지 않는다. 인증·승인 후 상세를 다시 조회한다.
+            useEffect(() => {
+                if (caseDetail?.decision?.can_view && !caseDetail?.resource?.content) {
+                    setRefreshCounter(c => c + 1);
+                }
+            }, [caseDetail?.decision?.can_view]);
 
             useEffect(() => {
                 const level = caseDetail?.decision?.level || 1;
@@ -2309,10 +2313,10 @@
                             setCaseDetail(prev => prev ? ({
                                 ...prev,
                                 decision: data.decision || prev.decision,
-                                scoring: data.scoring || prev.scoring,
-                                resource: data.resource
+                                scoring: null,
+                                resource: data.decision?.can_view && prev.decision?.can_view
                                     ? { ...prev.resource, ...data.resource }
-                                    : prev.resource,
+                                    : (data.resource || {}),
                                 external_message: data.error || prev.external_message,
                             }) : prev);
                         }

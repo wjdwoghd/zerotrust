@@ -59,23 +59,7 @@ def mask_content(content: str, level: int) -> str:
         return content
     elif level == 2:
         return content  # 워터마크는 프론트에서 처리
-    elif level == 3:
-        # 부분 마스킹: 이름 패턴, 전화번호 패턴
-        masked = re.sub(r'[가-힣]{2,4}(?=\s*(씨|님|경찰관|형사|수사관))',
-                        lambda m: mask_name(m.group()), content)
-        masked = re.sub(r'01[016789]-?\d{3,4}-?\d{4}',
-                        lambda m: mask_phone(m.group()), masked)
-        masked = re.sub(r'\d{6}-\d{7}',
-                        lambda m: mask_id_number(m.group()), masked)
-        return masked
-    elif level == 4:
-        # 요약만 표시
-        lines = content.split('\n')
-        if len(lines) > 3:
-            return '\n'.join(lines[:3]) + '\n\n[상세 내용은 권한 승인 후 열람 가능합니다]'
-        return content[:200] + '\n\n[상세 내용은 권한 승인 후 열람 가능합니다]'
-    else:
-        return "[접근 권한이 없습니다. 관리자에게 문의하세요.]"
+    return ""
 
 
 def apply_masking(resource: dict, decision_level: int, user_name: str = "") -> dict:
@@ -91,10 +75,14 @@ def apply_masking(resource: dict, decision_level: int, user_name: str = "") -> d
     permissions = get_action_permissions(decision_level)
     result.update(permissions)
 
-    if decision_level >= 5:
-        result["content"] = "[접근이 차단되었습니다]"
-        result["description"] = "[접근이 차단되었습니다]"
-        return result
+    if not permissions["can_view"]:
+        return {
+            "id": result.get("id"),
+            "title": result.get("title"),
+            "sensitivity_grade": result.get("sensitivity_grade"),
+            "masking_level": decision_level,
+            **permissions,
+        }
 
     if "content" in result and result["content"]:
         result["content"] = mask_content(result["content"], decision_level)
