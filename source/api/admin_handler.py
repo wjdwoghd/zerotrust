@@ -1242,7 +1242,7 @@ class CaseAssignmentRequireOtpHandler(BaseHandler):
                 return self.write_error_json("담당 사건 등록 요청을 찾을 수 없습니다.", 404, code="request_not_found")
             if int(req["requester_id"]) == int(admin["user_id"]):
                 return self.write_error_json("본인이 요청한 담당 사건 등록은 본인이 처리할 수 없습니다.", 403, code="self_approval_forbidden")
-            if req["status"] not in ("pending_admin", "otp_required"):
+            if req["status"] != "pending_admin":
                 return self.write_error_json("OTP 요구가 가능한 상태가 아닙니다.", 400, code="invalid_status")
 
             row = db.execute(
@@ -1277,8 +1277,8 @@ class CaseAssignmentApproveHandler(BaseHandler):
                 return self.write_error_json("담당 사건 등록 요청을 찾을 수 없습니다.", 404, code="request_not_found")
             if int(req["requester_id"]) == int(admin["user_id"]):
                 return self.write_error_json("본인이 요청한 담당 사건 등록은 본인이 승인할 수 없습니다.", 403, code="self_approval_forbidden")
-            if req["status"] not in ("pending_admin", "otp_verified"):
-                return self.write_error_json("승인 가능한 상태가 아닙니다. OTP 요구 중이면 요청자의 인증 완료 후 승인하세요.", 400, code="invalid_status")
+            if req["status"] != "otp_verified":
+                return self.write_error_json("요청자의 OTP 인증 완료 후 승인할 수 있습니다.", 400, code="invalid_status")
 
             requester = db.execute(
                 "SELECT id, department, assigned_cases, job_scope FROM users WHERE id=?",
@@ -1344,6 +1344,8 @@ class CaseAssignmentRejectHandler(BaseHandler):
                 return self.write_error_json("담당 사건 등록 요청을 찾을 수 없습니다.", 404, code="request_not_found")
             if int(req["requester_id"]) == int(admin["user_id"]):
                 return self.write_error_json("본인이 요청한 담당 사건 등록은 본인이 반려할 수 없습니다.", 403, code="self_approval_forbidden")
+            if req["status"] not in ("pending_admin", "otp_required", "otp_verified"):
+                return self.write_error_json("반려 가능한 상태가 아닙니다.", 400, code="invalid_status")
 
             row = db.execute(
                 "UPDATE case_assignment_requests "

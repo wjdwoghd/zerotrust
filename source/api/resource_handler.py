@@ -640,7 +640,7 @@ class CaseAssignmentRequestHandler(BaseHandler):
             )
             db.commit()
             self.write_json({
-                "message": "담당 사건 등록 요청을 보냈습니다.",
+                "message": "담당 사건 등록 요청을 보냈습니다. 관리자의 OTP 인증 요청을 기다려 주세요.",
                 "assignment_request": row,
             }, status=201)
         finally:
