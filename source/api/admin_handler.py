@@ -996,7 +996,7 @@ class AdminApprovalStatusHandler(BaseHandler):
     반환:
       - state: 'pending' | 'approved' | 'rejected' | 'used' | 'expired' | 'none'
       - expires_at: 승인 만료 시각(승인된 경우)
-      - request_id: 요청 PK(있을 때)
+    인증 전 응답에는 승인 상태와 승인 만료 시각만 포함한다.
     """
     def get(self):
         username = (self.get_argument("username", default="") or "").strip()
@@ -1015,7 +1015,7 @@ class AdminApprovalStatusHandler(BaseHandler):
             return self.write_json({"state": "none"})
 
         row = db.execute(
-            "SELECT id, status, expires_at, resolved_at "
+            "SELECT status, expires_at "
             "FROM login_approval_requests "
             "WHERE user_id=? "
             "ORDER BY id DESC LIMIT 1",
@@ -1031,9 +1031,7 @@ class AdminApprovalStatusHandler(BaseHandler):
             status = "none"
         self.write_json({
             "state": status,
-            "request_id": int(row["id"]),
-            "expires_at": row["expires_at"],
-            "resolved_at": row["resolved_at"],
+            "expires_at": row["expires_at"] if status == "approved" else None,
         })
 
 

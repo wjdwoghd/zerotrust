@@ -9,6 +9,18 @@ from core.case_assignment_rules import assignment_compatibility, assignment_guid
 from security.mfa_service import verify_totp_consume
 
 
+def _public_assignment_request(row: dict) -> dict:
+    """요청자 화면에 필요한 담당 등록 식별자와 상태만 반환한다."""
+    result = {
+        "id": row["id"],
+        "resource_id": row["resource_id"],
+        "status": row["status"],
+    }
+    if "resource_title" in row:
+        result["resource_title"] = row["resource_title"]
+    return result
+
+
 class CaseListHandler(BaseHandler):
     """GET /api/resources/cases - 사건 목록 조회"""
     def get(self):
@@ -613,7 +625,7 @@ class CaseAssignmentRequestHandler(BaseHandler):
             if existing:
                 return self.write_json({
                     "message": "이미 처리 대기 중인 담당 사건 등록 요청이 있습니다.",
-                    "assignment_request": existing,
+                    "assignment_request": _public_assignment_request(existing),
                     "existing": True,
                 })
 
@@ -641,7 +653,7 @@ class CaseAssignmentRequestHandler(BaseHandler):
             db.commit()
             self.write_json({
                 "message": "담당 사건 등록 요청을 보냈습니다.",
-                "assignment_request": row,
+                "assignment_request": _public_assignment_request(row),
             }, status=201)
         finally:
             db.close()
@@ -657,19 +669,18 @@ class MyCaseAssignmentRequestsHandler(BaseHandler):
         db = get_db()
         try:
             rows = db.execute(
-                "SELECT r.*, "
-                "       res.case_number, res.title AS resource_title, "
-                "       res.sensitivity_grade, res.department AS resource_department, "
-                "       reviewer.username AS otp_required_by_username, reviewer.name AS otp_required_by_name "
+                "SELECT r.id, r.resource_id, r.status, res.title AS resource_title "
                 "FROM case_assignment_requests r "
                 "JOIN resources res ON r.resource_id=res.id "
-                "LEFT JOIN users reviewer ON r.otp_required_by=reviewer.id "
                 "WHERE r.requester_id=? "
                 "  AND r.status IN ('pending_admin','otp_required','otp_verified') "
                 "ORDER BY r.requested_at DESC",
                 (user["user_id"],)
             ).fetchall()
-            self.write_json({"requests": rows, "total": len(rows)})
+            self.write_json({
+                "requests": [_public_assignment_request(row) for row in rows],
+                "total": len(rows),
+            })
         finally:
             db.close()
 
@@ -735,7 +746,10 @@ class CaseAssignmentOtpVerifyHandler(BaseHandler):
                  user["user_id"])
             )
             db.commit()
-            self.write_json({"message": "OTP 인증이 완료되었습니다. 관리자 최종 승인을 기다려 주세요.", "assignment_request": row})
+            self.write_json({
+                "message": "OTP 인증이 완료되었습니다. 관리자 최종 승인을 기다려 주세요.",
+                "assignment_request": _public_assignment_request(row),
+            })
         finally:
             db.close()
 

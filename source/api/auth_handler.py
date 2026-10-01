@@ -1012,7 +1012,6 @@ class MeHandler(BaseHandler):
         s = row_to_dict(session_row) if session_row else None
 
         # 세션 타이머 계산 (#24)
-        # - server_time : 클라이언트가 자기 시계 drift 를 보정할 기준 시각.
         # - idle_remaining_seconds : last_activity + idle_timeout 까지 남은 초.
         # - absolute_remaining_seconds : 절대 만료까지 남은 초.
         # 음수가 나올 경우 0 으로 클램프 (만료 직전 race 보호).
@@ -1034,17 +1033,9 @@ class MeHandler(BaseHandler):
                 absolute_remaining = max(0, int((abs_exp - now_utc).total_seconds()))
 
             session_payload = {
-                "id": s["id"],
-                "device_id": s["device_id"],
-                "location": s["location"],
-                "login_at": s["login_at"],
-                "last_activity": s["last_activity"],
-                "max_sensitivity_accessed": s["max_sensitivity_accessed"],
                 # ── #24 세션 타이머 페이로드 ────────────────────────
-                "server_time": now_utc.isoformat(),
                 "idle_timeout_seconds": idle_timeout,
                 "idle_remaining_seconds": idle_remaining,
-                "absolute_expires_at": s.get("absolute_expires_at"),
                 "absolute_remaining_seconds": absolute_remaining,
                 "is_admin_gated": bool(s.get("is_admin_gated")),
             }
@@ -1054,14 +1045,9 @@ class MeHandler(BaseHandler):
                 "id": u["id"],
                 "username": u["username"],
                 "name": u["name"],
-                "department": u["department"],
-                "rank": u["rank"],
                 "role": u["role"],
                 "trust_score": u["trust_score"],
                 "violation_count": u["violation_count"],
-                "registered_devices": u["registered_devices"],
-                "allowed_locations": u["allowed_locations"],
-                "assigned_cases": u["assigned_cases"],
             },
             "session": session_payload,
         })
