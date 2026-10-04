@@ -189,7 +189,7 @@ def live_server(_reset_db_state):
 
 # ─── HTTP 헬퍼 ───────────────────────────────────────────────────
 def _http_call(base_url, method, path, body=None, token=None, device=None,
-               location=None, ip=None):
+               location=None, ip=None, sim_hour=None):
     headers = {"Content-Type": "application/json"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -199,6 +199,8 @@ def _http_call(base_url, method, path, body=None, token=None, device=None,
         headers["X-Location"] = quote(location)
     if ip:
         headers["X-IP-Address"] = ip
+    if sim_hour is not None:
+        headers["X-Sim-Hour"] = str(sim_hour)
     data = (
         _json.dumps(body, ensure_ascii=False).encode("utf-8")
         if body is not None else None

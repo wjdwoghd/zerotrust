@@ -2163,6 +2163,7 @@
             const [loading, setLoading] = useState(true);
             const [downloadLoading, setDownloadLoading] = useState(false);
             const [copyLoading, setCopyLoading] = useState(false);
+            const [viewLoading, setViewLoading] = useState(false);
 
             // 열람 모달 — decision.resource.content 를 <pre> 로 보여준다.
             const [showViewModal, setShowViewModal] = useState(false);
@@ -2258,12 +2259,23 @@
                         if (cancelled) return;
                         setCaseDetail(prev => {
                             if (!prev) return prev;
+                            const previousResource = prev.resource || {};
+                            const nextResource = data.resource || {};
+                            const permissionsChanged = data.decision && (
+                                data.decision.level !== prev.decision?.level ||
+                                data.decision.can_view !== prev.decision?.can_view ||
+                                data.decision.can_download !== prev.decision?.can_download ||
+                                data.decision.can_copy !== prev.decision?.can_copy ||
+                                nextResource.masking_level !== previousResource.masking_level
+                            );
                             return {
                                 ...prev,
                                 decision: data.decision || prev.decision,
                                 scoring: data.scoring || prev.scoring,
                                 resource: data.resource
-                                    ? { ...prev.resource, ...data.resource }
+                                    ? { ...previousResource, ...nextResource,
+                                        content: permissionsChanged
+                                            ? undefined : previousResource.content }
                                     : prev.resource,
                                 external_message: '',
                                 policy_check: null,
@@ -2283,10 +2295,40 @@
             useEffect(() => {
                 const level = caseDetail?.decision?.level || 1;
                 const bg = !!(caseDetail?.decision && caseDetail.decision.break_glass);
-                if (showViewModal && level > 2 && !bg) {
+                if (showViewModal && ((level > 2 && !bg) ||
+                    caseDetail?.resource?.content === undefined)) {
                     setShowViewModal(false);
                 }
-            }, [caseDetail?.decision?.level, showViewModal]);
+            }, [caseDetail?.decision?.level, caseDetail?.resource?.content, showViewModal]);
+
+            const handleView = async () => {
+                setViewLoading(true);
+                try {
+                    const response = await fetch(`/api/resources/cases/${caseId}`, {
+                        headers: {
+                            'Authorization': `Bearer ${auth.token}`,
+                            'X-Device-Id': encodeURIComponent(sim.deviceId),
+                            'X-Location': encodeURIComponent(sim.location),
+                            ...(sim.simHour != null && { 'X-Sim-Hour': String(sim.simHour) }),
+                        }
+                    });
+                    const data = await response.json();
+                    if (!response.ok || !data.resource?.can_view) {
+                        setShowViewModal(false);
+                        if (response.ok) setCaseDetail(data);
+                        alert(data.error || data.decision?.external_message ||
+                            '문서 열람이 제한되었습니다.');
+                        return;
+                    }
+                    setCaseDetail(data);
+                    setShowViewModal(true);
+                } catch (err) {
+                    console.error('View error:', err);
+                    alert('열람 요청 중 오류가 발생했습니다.');
+                } finally {
+                    setViewLoading(false);
+                }
+            };
 
             // 실제 파일 다운로드 — /api/resources/cases/:id/file 로 요청.
             // 서버가 action_type='download' 로 재평가하고 허용 시 attachment
@@ -2853,8 +2895,8 @@
 
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 <button
-                                    onClick={() => setShowViewModal(true)}
-                                    disabled={!canView}
+                                    onClick={handleView}
+                                    disabled={!canView || viewLoading}
                                     title={canView ? '문서를 현재 권한 수준으로 열람합니다.' :
                                            (mLevel === 3 ? '재인증 후 열람 가능합니다.' :
                                             mLevel === 4 ? '관리자 승인 후 열람 가능합니다.' :

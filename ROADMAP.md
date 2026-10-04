@@ -70,3 +70,25 @@ Windows 설치 파일 빌드, GitHub Release 초안 생성을 연결한다.
 단위 테스트와 코드 규칙 검사 후, 격리 PostgreSQL API 시나리오에서 허용·거부·
 점수 경계·시간창·폴링을, 실제 화면에서 다운로드·복사 버튼과 권한 변화를
 최종 통합 검증한다.
+
+- 2026-10-04 로컬 검증: `feat/download-copy-behavior-risk` 작업 트리는 시작 시
+  깨끗했음. `source/tests/conftest.py`에 고정 시각 HTTP 헤더 지원을 더하고,
+  `source/tests/scenarios/test_download_copy_behavior_risk.py`에 실제 Tornado API와
+  격리 PostgreSQL에서 허용·거부, 현재 시도 제외, 유형별 1회 가산, L1/L2
+  경계 변화, 5분 만료, 상태 폴링 불변, 복사 거부 본문 부재, 점수 레벨과 승인 후
+  최종 레벨 구분을 재현하는 시나리오를 추가함. 시나리오는 아직 실행되지 않음.
+  화면 코드 점검에서 권한 하락 후 이전 본문이 남는 경로를 확인해 권한 변화 시
+  본문 제거와 명시적 열람 클릭 시 서버 재평가를 적용함. 실제 화면 검증은 대기.
+- `python scripts/check_code_conventions.py`: 72개 Python 파일 검사 통과.
+  `python -m pytest -q -ra tests/unit/test_anomaly_service.py
+  tests/unit/test_copy_handler.py tests/unit/test_policy_thresholds.py
+  tests/unit/test_decision_matrix.py
+  tests/scenarios/test_download_copy_behavior_risk.py`: 42 passed / 23 skipped.
+  통과한 항목은 DB가 필요 없는 단위 테스트임. `git diff --check` 통과.
+- 격리 DB 확인 결과: 현재 `POSTGRES_TEST_URL` 미설정, 기본 대상은
+  `localhost:5432/zerotrust_test`; 5432·55439 포트에 PostgreSQL 리스너가
+  없고 테스트 픽스처의 연결도 실패함. 이전 기록의 55439 전용 클러스터도
+  현재 실행 중이지 않음. 폐기 가능한 격리 DB를 실제 연결로 확인하지 못해
+  초기화·시드, 실제 API 테스트를 실행하지 않았음. 서버를 띄울 수 없어
+  브라우저에서 다운로드·복사 버튼의 허용·거부 및 권한 변화도 미검증.
+  완료 조건을 충족하지 못했으므로 **검증 대기** 유지.
