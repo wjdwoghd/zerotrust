@@ -31,6 +31,27 @@ def get_recent_access_count(user_id: int, window_seconds: int = RATE_LIMIT_WINDO
     return row["cnt"] if row else 0
 
 
+def get_recent_action_attempts(user_id: int,
+                               window_seconds: int = RATE_LIMIT_WINDOW) -> dict:
+    """최근 평가가 끝난 다운로드·복사 시도를 결과와 무관하게 집계한다.
+
+    access_logs는 접근 결정 후에만 기록된다. 인증 실패나 평가 전 오류는
+    이 표에 없으므로 가산하지 않으며, 현재 요청은 기록 전에 조회된다.
+    """
+    db = get_db()
+    try:
+        rows = db.execute(
+            "SELECT action_type, COUNT(*) AS cnt FROM access_logs "
+            "WHERE user_id=? AND action_type IN ('download', 'copy') "
+            "AND created_at >= CURRENT_TIMESTAMP - INTERVAL '1 second' * ? "
+            "GROUP BY action_type",
+            (user_id, int(window_seconds)),
+        ).fetchall()
+        return {row["action_type"]: row["cnt"] for row in rows}
+    finally:
+        db.close()
+
+
 def get_session_access_count(session_id: int) -> int:
     """현재 세션 내 총 접근 횟수"""
     db = get_db()
@@ -72,6 +93,7 @@ def detect_anomalies(user_id: int, session_id: int, action_type: str = "view",
     # - 5분 내 5회 이상: 산발적/탐색성 접근으로 주의(+10)
     # - 5분 내 10회 이상: 명확한 고빈도 접근으로 위험(+20)
     recent_count = get_recent_access_count(user_id)
+    recent_actions = get_recent_action_attempts(user_id)
     if recent_count >= HIGH_RISK_RATE_LIMIT_THRESHOLD:
         anomalies.append({
             "type": "HIGH_FREQUENCY_CRITICAL",
@@ -144,6 +166,8 @@ def detect_anomalies(user_id: int, session_id: int, action_type: str = "view",
         "details": "; ".join(a["detail"] for a in anomalies) if anomalies else "이상 없음",
         # ── 점수와 분리된 원시 카운트/플래그 (scoring_engine 전용) ──
         "recent_access_count": recent_count,
+        "recent_download_attempt_count": recent_actions.get("download", 0),
+        "recent_copy_attempt_count": recent_actions.get("copy", 0),
         "session_access_count": session_count,
         "download_attempt": action_type == "download",
         "copy_attempt": action_type == "copy",

@@ -71,3 +71,36 @@ def test_calculate_scoring_calls_each_axis_once(monkeypatch):
     assert result["total"]["total_risk_score"] == 45
     assert result["behavior_risk"]["kwargs"]["download_attempt"] is False
     assert result["behavior_risk"]["kwargs"]["copy_attempt"] is False
+
+
+def test_recent_attempts_affect_next_scoring_without_changing_raw_score(monkeypatch):
+    """이전 다운로드·복사 시도만 유형별로 가산하고 총점을 보존한다."""
+    monkeypatch.setattr(access_evaluator, "score_object_sensitivity",
+                        lambda *args: {"score": 10})
+    monkeypatch.setattr(access_evaluator, "score_environment_risk",
+                        lambda *args, **kwargs: {"score": 0})
+    monkeypatch.setattr(access_evaluator, "score_work_fitness",
+                        lambda **kwargs: {"score": 0})
+    monkeypatch.setattr(access_evaluator, "score_behavior_risk",
+                        lambda **kwargs: {"score": 20 * kwargs["download_attempt"]
+                                                + 20 * kwargs["copy_attempt"],
+                                          "factors": []})
+    monkeypatch.setattr(access_evaluator, "calculate_total_risk",
+                        lambda *scores: {"total_risk_score": sum(scores)})
+    common = dict(
+        user={}, resource={"sensitivity_grade": 1},
+        device_registered=True, location_allowed=True,
+        is_assigned_case=True, same_department=True, job_relevance=True,
+        pre_approved=False, unassigned_penalty_clicks=0,
+        is_night=False, hour=14,
+    )
+    current = access_evaluator._calculate_scoring(
+        **common, anomaly_result={"download_attempt": True, "copy_attempt": True},
+    )
+    recent = access_evaluator._calculate_scoring(
+        **common, anomaly_result={"recent_download_attempt_count": 3,
+                                  "recent_copy_attempt_count": 2},
+    )
+    assert current["behavior_risk"]["score"] == 0
+    assert recent["behavior_risk"]["score"] == 40
+    assert recent["total"]["total_risk_score"] == 50

@@ -443,6 +443,41 @@ class CaseDownloadHandler(BaseHandler):
         self.write_json(result)
 
 
+class CaseCopyHandler(BaseHandler):
+    """POST /api/resources/cases/<id>/copy - 서버에서 복사 권한을 평가한다."""
+    def post(self, case_id):
+        user = self.require_auth()
+        if not user:
+            return
+
+        sim_hour = self.get_simulated_hour()
+        hour = sim_hour if sim_hour is not None else time.localtime().tm_hour
+        result = evaluate_access(
+            user_id=user["user_id"],
+            resource_id=int(case_id),
+            session_id=user.get("session_id"),
+            device_id=self.get_device_id(),
+            ip_address=self.get_ip_address(),
+            location=self.get_location(),
+            action_type="copy",
+            is_night=hour >= 22 or hour < 6,
+            hour=hour,
+        )
+        resource = result.get("resource") or {}
+        if not resource.get("can_copy"):
+            return self.write_json({
+                "error": (result.get("decision") or {}).get("external_message")
+                         or "이 문서는 현재 복사가 허용되지 않습니다.",
+                "code": "copy_not_allowed",
+                "request_id": result.get("request_id"),
+            }, status=403)
+
+        self.write_json({
+            "content": resource.get("content") or "",
+            "request_id": result.get("request_id"),
+        })
+
+
 class CaseFileHandler(BaseHandler):
     """
     GET /api/resources/cases/<id>/file

@@ -2162,6 +2162,7 @@
             const [caseDetail, setCaseDetail] = useState(null);
             const [loading, setLoading] = useState(true);
             const [downloadLoading, setDownloadLoading] = useState(false);
+            const [copyLoading, setCopyLoading] = useState(false);
 
             // 열람 모달 — decision.resource.content 를 <pre> 로 보여준다.
             const [showViewModal, setShowViewModal] = useState(false);
@@ -2340,6 +2341,33 @@
                     alert('다운로드 요청 중 오류가 발생했습니다.');
                 } finally {
                     setDownloadLoading(false);
+                }
+            };
+
+            const handleCopy = async () => {
+                setCopyLoading(true);
+                try {
+                    const response = await fetch(`/api/resources/cases/${caseId}/copy`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${auth.token}`,
+                            'X-Device-Id': encodeURIComponent(sim.deviceId),
+                            'X-Location': encodeURIComponent(sim.location),
+                            ...(sim.simHour != null && { 'X-Sim-Hour': String(sim.simHour) }),
+                        }
+                    });
+                    const data = await response.json();
+                    if (!response.ok) {
+                        alert(data.error || '복사가 제한되었습니다.');
+                        return;
+                    }
+                    await navigator.clipboard.writeText(data.content || '');
+                    alert('문서 내용을 클립보드에 복사했습니다.');
+                } catch (err) {
+                    console.error('Copy error:', err);
+                    alert('복사 요청 중 오류가 발생했습니다.');
+                } finally {
+                    setCopyLoading(false);
                 }
             };
 
@@ -2785,6 +2813,7 @@
                         const permissions = decision?.action_permissions || {};
                         const canView = !!permissions.can_view;
                         const canDownload = !!permissions.can_download;
+                        const canCopy = !!permissions.can_copy;
 
                         return (
                             <React.Fragment>
@@ -2822,7 +2851,7 @@
                         <div className="glass-card p-6 rounded-lg">
                             <h3 className="text-xl font-bold mb-4">문서 액션</h3>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 <button
                                     onClick={() => setShowViewModal(true)}
                                     disabled={!canView}
@@ -2853,6 +2882,18 @@
                                     }`}
                                 >
                                     {downloadLoading ? '다운로드 중...' : '📥 문서 다운로드'}
+                                </button>
+                                <button
+                                    onClick={handleCopy}
+                                    disabled={!canCopy || copyLoading}
+                                    title={canCopy ? '서버 권한 확인 후 문서 내용을 복사합니다.' : '현재 단계에서 복사가 허용되지 않습니다.'}
+                                    className={`py-3 rounded font-semibold transition ${
+                                        canCopy
+                                            ? 'bg-green-600 hover:bg-green-700 text-slate-900'
+                                            : 'bg-slate-50 text-slate-600 cursor-not-allowed opacity-60'
+                                    }`}
+                                >
+                                    {copyLoading ? '복사 중...' : '📋 문서 복사'}
                                 </button>
                             </div>
 

@@ -11,6 +11,46 @@ TZ 와 무관하게 정확.
 from __future__ import annotations
 
 
+def test_action_attempts_use_access_decisions_and_five_minute_window(monkeypatch):
+    """결정 로그의 허용·거부 시도를 함께 세고 다른 행동은 제외한다."""
+    from core import anomaly_service
+
+    class FakeDb:
+        def execute(self, sql, params):
+            assert "action_type IN ('download', 'copy')" in sql
+            assert "decision_level" not in sql
+            assert params == (7, 300)
+            return self
+
+        def fetchall(self):
+            return [{"action_type": "download", "cnt": 3},
+                    {"action_type": "copy", "cnt": 2}]
+
+        def close(self):
+            self.closed = True
+
+    db = FakeDb()
+    monkeypatch.setattr(anomaly_service, "get_db", lambda: db)
+    assert anomaly_service.get_recent_action_attempts(7) == {
+        "download": 3, "copy": 2,
+    }
+    assert db.closed
+
+
+def test_detect_anomalies_reports_prior_attempts_separately(monkeypatch):
+    """현재 동작 플래그와 이전 누적 횟수는 서로 다른 신호다."""
+    from core import anomaly_service
+
+    monkeypatch.setattr(anomaly_service, "get_recent_access_count", lambda user_id: 0)
+    monkeypatch.setattr(anomaly_service, "get_recent_action_attempts",
+                        lambda user_id: {"download": 2, "copy": 1})
+    result = anomaly_service.detect_anomalies(7, 0, action_type="download")
+    assert result["download_attempt"] is True
+    assert result["copy_attempt"] is False
+    assert result["recent_download_attempt_count"] == 2
+    assert result["recent_copy_attempt_count"] == 1
+
+
 def test_recent_access_count_excludes_old_rows(db):
     """5분 윈도우 안의 행만 카운트되는지 — TZ 함정이 있다면 0 반환됨."""
     from core.anomaly_service import get_recent_access_count

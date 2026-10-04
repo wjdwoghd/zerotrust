@@ -36,7 +36,7 @@ from api.auth_handler import (
 )
 from api.resource_handler import (
     CaseListHandler, CaseDetailHandler, CaseAccessStatusHandler,
-    CaseRestrictedClickHandler, CaseDownloadHandler, CaseFileHandler,
+    CaseRestrictedClickHandler, CaseDownloadHandler, CaseCopyHandler, CaseFileHandler,
     CaseApprovalRequestHandler, CaseAssignmentRequestHandler, MyCaseAssignmentRequestsHandler, CaseAssignmentOtpVerifyHandler,
 )
 from api.admin_handler import (
@@ -248,6 +248,7 @@ def make_app() -> tornado.web.Application:
         (r"/api/resources/cases/(\d+)/restricted-click", CaseRestrictedClickHandler),
         (r"/api/resources/cases/(\d+)", CaseDetailHandler),
         (r"/api/resources/cases/(\d+)/download", CaseDownloadHandler),
+        (r"/api/resources/cases/(\d+)/copy", CaseCopyHandler),
         (r"/api/resources/cases/(\d+)/file", CaseFileHandler),
         (r"/api/resources/cases/(\d+)/request-approval", CaseApprovalRequestHandler),
         (r"/api/resources/cases/(\d+)/assignment-request", CaseAssignmentRequestHandler),

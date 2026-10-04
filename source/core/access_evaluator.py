@@ -41,9 +41,8 @@ def _calculate_scoring(*, user: dict, resource: dict,
                        is_night: bool, hour: int | None) -> dict:
     """접근 컨텍스트를 네 가지 점수 축과 최종 위험 점수로 변환한다.
 
-    현재 요청의 다운로드·복사 동작은 감사 대상으로만 취급하고 점수에는
-    이전까지 누적된 행동만 반영한다. 그래야 허용된 문서가 동작 요청 자체로
-    즉시 다른 접근 레벨로 바뀌는 자기모순을 피할 수 있다.
+    현재 요청의 다운로드·복사 동작은 점수에서 제외한다. 평가가 끝난
+    최근 5분 시도는 유형별로 한 번 가산해 다음 요청부터 반영한다.
     """
     object_result = score_object_sensitivity(
         resource["sensitivity_grade"],
@@ -69,8 +68,8 @@ def _calculate_scoring(*, user: dict, resource: dict,
     )
     behavior_result = score_behavior_risk(
         access_count_5min=anomaly_result.get("recent_access_count", 0),
-        download_attempt=False,
-        copy_attempt=False,
+        download_attempt=anomaly_result.get("recent_download_attempt_count", 0) > 0,
+        copy_attempt=anomaly_result.get("recent_copy_attempt_count", 0) > 0,
         bulk_query="BULK_QUERY" in anomaly_result.get("anomaly_types", []),
         unauthorized_access=not is_assigned_case,
         high_sensitivity_unassigned=(
