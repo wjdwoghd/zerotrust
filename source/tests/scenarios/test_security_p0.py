@@ -73,13 +73,13 @@ def test_impossible_travel_immediate_block(http, login_as, db):
         "GET", f"/api/resources/cases/{row['id']}",
         token=tok, location="지청-부산", ip="59.6.31.100",  # 부산 권역
     )
-    # 즉시차단 (DENY=403/level=5) 또는 ADMIN_APPROVAL 까지 격상
+    # 즉시차단 또는 관리자 승인 요구까지만 공개한다.
     # impossible_travel 룰 발동 시 외부 응답은 DENY
     assert code in (200, 403)
     if code == 200:
-        # 200 응답이라도 결정 레벨이 5 인지 확인
-        assert data.get("decision", {}).get("level", 1) >= 4, \
-            f"impossible_travel 시 level >= 4 기대, got {data}"
+        assert data.get("status") in {"VERIFY", "DENY"}, data
+        assert data["actions"]["can_view"] is False
+        assert "content" not in data.get("resource", {})
 
 
 # ─── #8: 비허용 위치 + 미등록 단말 + 고민감 다운로드 즉시차단 ──
@@ -97,9 +97,10 @@ def test_high_risk_download_immediate_block(http, login_as, db):
         ip="1.2.3.4",
         body={},
     )
-    # 즉시차단 — 4xx 또는 200 + level=5
+    # 즉시차단 — 4xx 또는 200 + 공개 차단 상태
     if code == 200:
-        assert data.get("decision", {}).get("level") == 5
+        assert data.get("status") == "DENY"
+        assert data["actions"]["can_download"] is False
     else:
         assert code in (400, 403)
 

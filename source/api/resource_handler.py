@@ -2,6 +2,7 @@
 import json
 import time
 from api.base_handler import BaseHandler
+from api.response_formatter import format_evaluation_response
 from database import get_db, row_to_dict, rows_to_list
 from core.access_evaluator import evaluate_access
 from core.audit_events import AuditEvent, audit_log
@@ -30,19 +31,10 @@ class CaseListHandler(BaseHandler):
 
         db = get_db()
 
-        # 사건 목록은 제로트러스트 시연 폭을 위해 넓게 제공하되,
-        # 목록 단계에서는 상세 설명(description) 같은 민감 본문성 정보는 내려주지 않는다.
-        # 실제 상세 내용은 /api/resources/cases/<id> 에서 매 요청 접근평가 후 마스킹되어 반환된다.
-        # 목록 화면에서 담당 사건은 업무 편의상 기본 정보를 보여주고,
-        # 비담당 사건은 카드 자체는 노출하되(탐색/반복 접근 탐지 가능),
-        # 민감 메타데이터는 브라우저로도 최소한만 내려주도록 제한한다.
-        # 등급 필터를 서버 쿼리에 직접 반영하면 비담당/마스킹 사건도
-        # 응답 개수로 등급을 역추론할 수 있다. 목록은 항상 전체를 내려주고,
-        # 비담당 사건의 민감 등급은 클라이언트로도 보내지 않는다.
+        # 목록은 접근 평가 전 경로이므로 제목과 내부 라우팅 ID만 공개한다.
+        # 담당 여부는 화면에서 등록 요청과 상세 이동을 구분하는 데 사용한다.
         rows = db.execute(
-            "SELECT id, case_number, title, description, sensitivity_grade, "
-            "       data_type, department, requires_approval, created_at "
-            "FROM resources ORDER BY sensitivity_grade, id"
+            "SELECT id, case_number, title FROM resources ORDER BY id"
         ).fetchall()
 
         # require_auth()가 돌려주는 JWT payload에는 assigned_cases가 없을 수 있다.
@@ -76,14 +68,7 @@ class CaseListHandler(BaseHandler):
 
             cases.append({
                 "id": r["id"],
-                "case_number": r["case_number"] if is_assigned_case else "비공개",
                 "title": r["title"],
-                "description": (r.get("description") or "") if is_assigned_case else "상세 내용은 접근 평가 후 표시됩니다.",
-                "sensitivity_grade": r["sensitivity_grade"] if is_assigned_case else None,
-                "sensitivity_grade_masked": not is_assigned_case,
-                "data_type": r["data_type"] if is_assigned_case else "비공개",
-                "department": r["department"] if is_assigned_case else "비공개",
-                "requires_approval": bool(r.get("requires_approval")),
                 "is_assigned_case": bool(is_assigned_case),
             })
 
@@ -124,11 +109,11 @@ class CaseDetailHandler(BaseHandler):
             hour=hour,
         )
 
-        self.write_json(result)
+        self.write_json(format_evaluation_response(result, include_resource=True))
 
 
 class CaseAccessStatusHandler(BaseHandler):
-    """GET /api/resources/cases/<id>/status - 실시간 접근 점수/레벨 조회.
+    """GET /api/resources/cases/<id>/status - 공개 접근 상태 조회.
 
     상세 GET 과 달리 access_logs 를 새로 만들지 않는다. 화면 자동 갱신이
     자체적으로 행동 위험도를 끌어올리지 않게 하기 위한 읽기 전용 평가다.
@@ -170,7 +155,7 @@ class CaseAccessStatusHandler(BaseHandler):
             result=result,
             request_id=getattr(self, "request_id", None),
         )
-        self.write_json(_sanitize_status_response(result))
+        self.write_json(format_evaluation_response(result))
 
 
 class CaseRestrictedClickHandler(BaseHandler):
@@ -217,12 +202,7 @@ class CaseRestrictedClickHandler(BaseHandler):
 
             is_assigned = rid in assigned_ids or str(res["case_number"]) in assigned_strs
             if is_assigned:
-                return self.write_json({
-                    "recorded": False,
-                    "is_assigned_case": True,
-                    "click_index": 0,
-                    "behavior_penalty": 0,
-                })
+                return self.write_json({"recorded": False})
 
             before = db.execute(
                 "SELECT COUNT(*) AS c FROM audit_logs "
@@ -258,74 +238,7 @@ class CaseRestrictedClickHandler(BaseHandler):
             except Exception:
                 pass
 
-        self.write_json({
-            "recorded": True,
-            "is_assigned_case": False,
-            "click_index": click_index,
-            "penalty_clicks": penalty_clicks,
-            "behavior_penalty": behavior_penalty,
-            "message": (
-                "비담당 사건 최초 클릭 경고만 기록되었습니다."
-                if penalty_clicks == 0
-                else f"비담당 사건 반복 클릭으로 행동위험도 +{behavior_penalty}가 적용됩니다."
-            ),
-        })
-
-
-def _sanitize_status_response(result: dict) -> dict:
-    """사용자 실시간 폴링 응답에서 내부 사유/상세 문자열 제거."""
-    decision = dict(result.get("decision") or {})
-    display_score = decision.get("display_risk_score", decision.get("risk_score", 0))
-    decision = {
-        "level": decision.get("level"),
-        "label": decision.get("label"),
-        "label_en": decision.get("label_en"),
-        "risk_score": display_score,
-        "display_risk_score": display_score,
-        "raw_risk_score": (result.get("decision") or {}).get("raw_risk_score"),
-        "score_level": decision.get("score_level", decision.get("level")),
-        "score_label": decision.get("score_label", decision.get("label")),
-        "override": decision.get("override"),
-        "sensitivity_grade": decision.get("sensitivity_grade"),
-        "action_permissions": decision.get("action_permissions") or {},
-        "can_view": decision.get("can_view"),
-        "can_download": decision.get("can_download"),
-        "can_copy": decision.get("can_copy"),
-        "can_print": decision.get("can_print"),
-    }
-    if (result.get("decision") or {}).get("break_glass"):
-        decision["break_glass"] = (result.get("decision") or {}).get("break_glass")
-
-    scoring = result.get("scoring") or {}
-    total = scoring.get("total") or {}
-    safe_scoring = {
-        "object_sensitivity": {
-            "score": (scoring.get("object_sensitivity") or {}).get("score", 0)
-        },
-        "environment_risk": {
-            "score": (scoring.get("environment_risk") or {}).get("score", 0)
-        },
-        "behavior_risk": {
-            "score": (scoring.get("behavior_risk") or {}).get("score", 0)
-        },
-        "work_fitness": {
-            "score": (scoring.get("work_fitness") or {}).get("score", 0)
-        },
-        "total": {
-            "total_risk_score": display_score,
-            "score_level": total.get("score_level", decision.get("score_level")),
-            "decision_level": decision.get("level"),
-            "action_permissions": decision.get("action_permissions") or {},
-        },
-    }
-
-    return {
-        "request_id": result.get("request_id"),
-        "decision": decision,
-        "scoring": safe_scoring,
-        "resource": result.get("resource") or {},
-        "timestamp": result.get("timestamp"),
-    }
+        self.write_json({"recorded": True})
 
 
 def _log_score_change_if_needed(*, user_id: int, session_id, resource_id: int,
@@ -452,7 +365,7 @@ class CaseDownloadHandler(BaseHandler):
             hour=hour,
         )
 
-        self.write_json(result)
+        self.write_json(format_evaluation_response(result))
 
 
 class CaseFileHandler(BaseHandler):
@@ -498,18 +411,14 @@ class CaseFileHandler(BaseHandler):
 
         resource_block = result.get("resource") or {}
         if not resource_block.get("can_download"):
-            decision = result.get("decision") or {}
+            public_result = format_evaluation_response(result)
             return self.write_json({
                 "error": (
-                    decision.get("external_message")
+                    public_result.get("external_message")
                     or "이 문서는 현재 다운로드가 허용되지 않습니다."
                 ),
                 "code": "download_not_allowed",
-                "request_id": result.get("request_id"),
-                "decision": decision,
-                "scoring": result.get("scoring"),
-                "resource": resource_block,
-                "timestamp": result.get("timestamp"),
+                **public_result,
             }, status=403)
 
         # 원본(마스킹 미적용) 본문을 재조회해 첨부로 내려준다.

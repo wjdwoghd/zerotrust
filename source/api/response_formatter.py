@@ -2,13 +2,15 @@
 외부 응답 포매터 (L5-3)
 
 내부 decision/scoring/policy_check 객체를 외부 응답 바디로 변환한다.
-운영 정책: 외부는 3단계(ALLOW|VERIFY|DENY) + external_message + request_id
-만 노출하고, 내부 reason/risk_score/scoring 분해/정책 규칙명 등은
-모두 제거한다.
+일반 사건 API는 3단계 상태, 안내 문구, 허용 행동만 공개한다.
+상세의 본문·메타데이터는 서버의 열람 허용 후에만 포함한다.
+내부 점수·판단 근거는 감사 경로에 남긴다.
 """
 from __future__ import annotations
 
 from typing import Any, Dict
+
+from core.decision_engine import get_action_permissions
 
 
 _EXTERNAL_STATUS_BY_LEVEL = {
@@ -25,35 +27,48 @@ def external_status(level: int) -> str:
     return _EXTERNAL_STATUS_BY_LEVEL.get(level, "DENY")
 
 
-def format_evaluation_response(eval_result: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    access_evaluator.evaluate_access() 의 반환값을 외부 응답 바디로 변환.
-
-    Parameters
-    ----------
-    eval_result :
-        evaluate_access() 가 돌려준 dict. `decision`, `scoring`, `policy_check`,
-        `anomaly_check`, `resource`, `external_message`, `request_id` 포함.
-    """
+def format_evaluation_response(eval_result: Dict[str, Any], *,
+                               include_resource: bool = False) -> Dict[str, Any]:
+    """접근 평가 결과에서 사용자에게 허용된 상태와 문서 필드만 반환한다."""
     decision = eval_result.get("decision", {}) or {}
-    level = int(decision.get("level", 5))
+    try:
+        level = int(decision.get("level", 5))
+    except (TypeError, ValueError):
+        level = 5
+    if level not in _EXTERNAL_STATUS_BY_LEVEL:
+        level = 5
+    resource = eval_result.get("resource") or {}
+    permissions = get_action_permissions(level)
+    for action in permissions:
+        if resource.get(action) is False:
+            permissions[action] = False
+    actions = {
+        **permissions,
+        "reauthenticate": level == 3,
+        "request_approval": level == 4,
+        "attempt_break_glass": (
+            level >= 4 and int(resource.get("sensitivity_grade") or 0) >= 4
+        ),
+        "release_break_glass": bool(decision.get("break_glass")),
+    }
 
-    return {
+    response = {
         "request_id": eval_result.get("request_id"),
         "status": external_status(level),
-        "external_message": eval_result.get("external_message")
-                            or decision.get("external_message")
+        "external_message": decision.get("external_message")
+                            or eval_result.get("external_message")
                             or "",
-        "decision": {
-            "level": level,
-            "label_en": decision.get("label_en"),
-            # confidence 는 [0.0, 1.0]. 운영 모드에선 두 자리 반올림만 노출
-            # (정확한 계산식은 비공개 — 공격자가 임계값 부근 입력을 정밀하게
-            #  맞추기 어렵게).
-            "confidence": (
-                round(float(decision.get("confidence", 1.0)), 2)
-                if decision.get("confidence") is not None else None
-            ),
-        },
-        "resource": eval_result.get("resource"),
+        "actions": actions,
     }
+    if include_resource:
+        public_resource = {key: resource[key] for key in ("id", "title")
+                           if key in resource}
+        if permissions["can_view"]:
+            public_resource.update({
+                key: resource[key] for key in (
+                    "case_number", "sensitivity_grade", "data_type",
+                    "department", "content", "watermark",
+                ) if key in resource
+            })
+        response["resource"] = public_resource
+    return response

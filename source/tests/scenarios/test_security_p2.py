@@ -486,19 +486,10 @@ def test_pre_approval_expires_after_ttl(http, login_as, db):
         token=tok_d, location="본청",
     )
     assert code == 200, data
-    decision = data.get("decision") or {}
-    resource_payload = data.get("resource") or {}
-    can_download = resource_payload.get("can_download")
-
-    # level=1 (FULL) 으로 승격되면 fail-open. 만료 후엔 최소 level>=3 기대.
-    assert decision.get("level", 1) >= 3, (
-        f"TTL 만료 후에도 level<3 → fail-open: decision={decision}"
-    )
-    # 응답에 can_download 키가 있으면 False 여야 함 (다운로드 승격 X)
-    if can_download is not None:
-        assert can_download is False, (
-            f"TTL 만료 후 can_download=True → fail-open: {data}"
-        )
+    assert data["status"] in {"VERIFY", "DENY"}, data
+    assert data["actions"]["can_view"] is False
+    assert data["actions"]["can_download"] is False
+    assert set(data["resource"]) == {"id", "title"}
 
 
 def test_pre_approval_active_within_ttl(http, login_as, db):
@@ -508,6 +499,15 @@ def test_pre_approval_active_within_ttl(http, login_as, db):
         "SELECT id FROM resources WHERE sensitivity_grade>=4 LIMIT 1"
     ).fetchone()
     rid = row["id"]
+
+    code, before = http(
+        "GET", f"/api/resources/cases/{rid}",
+        token=tok_d, location="본청",
+    )
+    assert code == 200, before
+    assert before["status"] in {"VERIFY", "DENY"}
+    assert before["actions"]["can_view"] is False
+    assert set(before["resource"]) == {"id", "title"}
 
     code, data = http(
         "POST", f"/api/resources/cases/{rid}/request-approval",
@@ -539,12 +539,10 @@ def test_pre_approval_active_within_ttl(http, login_as, db):
         token=tok_d, location="본청",
     )
     assert code == 200, data
-    decision = data.get("decision") or {}
-    # 사전 승인 효과(완화)가 적용되어 차단(level=5) 까지는 가지 않아야.
-    # 정확한 level 은 다른 가중치 영향 — 느슨하게 level<=4 만 단언.
-    assert decision.get("level", 5) <= 4, (
-        f"활성 사전 승인이 적용 안 됨: decision={decision}"
-    )
+    assert data["status"] == "ALLOW", data
+    assert data["actions"]["can_view"] is True
+    assert data["actions"]["can_download"] is True
+    assert "content" in data["resource"]
 
 
 # ─── ITEM 4 / TEST 5 — Approve/Reject 동시성 ──────────────────────
