@@ -28,7 +28,7 @@ PG_PORT = os.environ.get("ZT_PG_PORT", "55432")
 SERVER_PORT = os.environ.get("SERVER_PORT", "8000")
 DATABASE_NAME = "zerotrust"
 DATABASE_URL = f"postgresql://postgres@127.0.0.1:{PG_PORT}/{DATABASE_NAME}"
-BASE_URL = f"http://127.0.0.1:{SERVER_PORT}"
+BASE_URL = f"http://localhost:{SERVER_PORT}"
 
 
 def _append_launcher_log(text: str) -> None:

@@ -20,4 +20,4 @@ Python 설치 시 `.pyw` 확장자 연결이 안 되어 있으면 같은 이름�
 
 ## macOS / Linux
 
-`.pyw` 대신 `python3 apps/virtual_device.py --account <u> --device-id <tok> --api-key <k> --base-url http://127.0.0.1:8000` 로 실행해도 동일합니다. macOS 에서 더블클릭 앱 형태가 필요하면 Automator 또는 py2app 를 참고하세요.
+`.pyw` 대신 `python3 apps/virtual_device.py --account <u> --device-id <tok> --api-key <k> --base-url http://localhost:8000` 로 실행해도 동일합니다. macOS 에서 더블클릭 앱 형태가 필요하면 Automator 또는 py2app 를 참고하세요.
