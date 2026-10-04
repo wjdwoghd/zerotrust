@@ -7,6 +7,10 @@
 - [프로젝트 설계·구현 보고서](REPORT.md)
 - [Zero Trust 정책 조정 이력](CHANGELOG_ZT_TUNING.md)
 
+## 검증 절차
+
+- [사용자 API 응답 최소화 수동 검증](USER_API_RESPONSE_VERIFICATION.md)
+
 ## 발표 자료
 
 - [최종 발표 자료](presentation/zero-trust-final-presentation.pptx)
