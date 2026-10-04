@@ -108,6 +108,61 @@ def test_my_assignment_endpoint_uses_public_fields(monkeypatch):
     }
 
 
+class _CreateAssignmentDb:
+    def execute(self, statement, params):
+        if "FROM resources" in statement:
+            return _Result({"id": 8, "case_number": "비공개 번호"})
+        if "FROM users" in statement:
+            return _Result({
+                "id": 5, "role": "user", "assigned_cases": [],
+            })
+        if "FROM case_assignment_requests" in statement:
+            return _Result(None)
+        if "INSERT INTO case_assignment_requests" in statement:
+            return _Result({
+                "id": 4, "resource_id": 8, "status": "pending_admin",
+                "reason": "내부 사유", "requested_at": "내부 처리 시각",
+            })
+        assert "INSERT INTO audit_logs" in statement
+        return _Result(None)
+
+    def commit(self):
+        pass
+
+    def close(self):
+        pass
+
+
+class _CreateAssignmentRequest(_AuthenticatedRequest):
+    request_id = "public-request-id"
+
+    def get_json_body(self):
+        return {"reason": "내부 사유"}
+
+    def write_json(self, payload, status=200):
+        self.payload = payload
+        self.status = status
+
+
+def test_assignment_creation_endpoint_omits_internal_record(monkeypatch):
+    """담당 등록 생성 응답에는 감사용 사유와 처리 시각을 싣지 않는다."""
+    monkeypatch.setattr(resource_handler, "get_db", _CreateAssignmentDb)
+    monkeypatch.setattr(
+        resource_handler, "assignment_compatibility", lambda requester, resource: (True, "")
+    )
+    request = _CreateAssignmentRequest()
+
+    resource_handler.CaseAssignmentRequestHandler.post(request, "8")
+
+    assert request.status == 201
+    assert request.payload == {
+        "message": "담당 사건 등록 요청을 보냈습니다.",
+        "assignment_request": {
+            "id": 4, "resource_id": 8, "status": "pending_admin",
+        },
+    }
+
+
 def test_my_break_glass_endpoint_uses_public_fields(monkeypatch):
     """본인 활성 조회가 정당화 사유와 세션 정보를 보내지 않는다."""
     monkeypatch.setattr(break_glass_handler, "get_db", _AssignmentDb)
@@ -129,6 +184,71 @@ def test_my_break_glass_endpoint_uses_public_fields(monkeypatch):
             "min_grade": 4, "expires_at": "만료 시각", "status": "active",
         }],
         "total": 1,
+    }
+
+
+class _ActivationDb:
+    def execute(self, statement, params):
+        assert "UPDATE user_devices SET last_otp_step" in statement
+        return _Result(None)
+
+    def commit(self):
+        pass
+
+    def close(self):
+        pass
+
+
+class _ActivationRequest(_AuthenticatedRequest):
+    request_id = "public-request-id"
+
+    def require_auth(self):
+        return {"user_id": 5, "session_id": 11}
+
+    def get_json_body(self):
+        return {
+            "justification": "긴급한 업무상 접근 사유", "scope": "resource",
+            "resource_id": 8, "mfa_code": "123456",
+        }
+
+    def get_ip_address(self):
+        return "접속 주소"
+
+    class _HttpRequest:
+        headers = {"User-Agent": "단말 정보"}
+
+    request = _HttpRequest()
+
+
+def test_break_glass_activation_endpoint_omits_internal_record(monkeypatch):
+    """발동 응답은 정당화·세션·접속 정보를 반환하지 않는다."""
+    monkeypatch.setattr(break_glass_handler, "get_db", _ActivationDb)
+    monkeypatch.setattr(
+        break_glass_handler.bg, "get_token_device_for_otp",
+        lambda db, user_id: {"id": 2, "mfa_secret": "secret", "last_otp_step": None},
+    )
+    monkeypatch.setattr(
+        break_glass_handler, "verify_totp_consume", lambda *args, **kwargs: (True, 123)
+    )
+    monkeypatch.setattr(
+        break_glass_handler.bg, "activate", lambda **kwargs: {
+            "id": 3, "scope": "resource", "resource_id": 8,
+            "min_grade": 4, "expires_at": "만료 시각", "status": "active",
+            "justification": "긴급한 업무상 접근 사유", "session_id": 11,
+            "ip": "접속 주소", "user_agent": "단말 정보",
+            "created_at": "내부 처리 시각",
+        },
+    )
+    request = _ActivationRequest()
+
+    break_glass_handler.BreakGlassActivateHandler.post(request)
+
+    assert request.payload == {
+        "message": "Break-Glass 발동 완료",
+        "activation": {
+            "id": 3, "scope": "resource", "resource_id": 8,
+            "min_grade": 4, "expires_at": "만료 시각", "status": "active",
+        },
     }
 
 
