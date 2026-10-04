@@ -58,8 +58,23 @@ Windows 설치 파일 빌드, GitHub Release 초안 생성을 연결한다.
 ## 후속 정책 정합성 — 진행 중
 
 [POLICY](docs/POLICY.md)의 미확정 항목을 합의한 뒤 별도 작업으로 수행한다.
-담당 등록 OTP 승인 조건은 화면 흐름에 맞춰 서버 상태 검사를 수정했다.
-완료 조건: OTP 인증 전 승인·담당 등록 차단, 인증 후 승인 허용,
-완료된 요청 재처리 차단을 격리 PostgreSQL API 테스트로 확인한다.
-현재 격리 DB 연결이 없어 검증 대기 중이다. L3/L4 본문, 응답 축약,
-행동 가산점은 이 작업의 범위에 포함하지 않는다.
+### 담당 사건 등록 OTP·관리자 승인 — 검증 대기
+
+목표: [POLICY](docs/POLICY.md)의 OTP 필수 상태 전이를 서버 API와 화면 버튼에
+같게 적용한다. 완료 조건: OTP 전후 승인 허용·거부, OTP 재요구, 잘못된 상태,
+자기 승인 방지, 세 대기 상태의 반려와 종료 상태 재처리를 관련 단위·격리
+PostgreSQL API 회귀 테스트로 확인한다. 실제 화면 버튼 흐름은 최종 통합 검증에서
+확인한다. 현재 담당 등록 요청의 만료·취소 API는 없다.
+
+- 2026-10-04 로컬 작업: 서버 승인·OTP 요구·반려 가드와 화면 승인 버튼 조건을
+  OTP 필수 흐름으로 일치시키고 단위·API 회귀 시나리오를 보강했다.
+- 격리 `.venv`에 프로젝트 의존성을 설치한 뒤
+  `..\.venv\Scripts\python.exe -m pytest -q -ra tests/unit/test_case_assignment_state.py`:
+  18 passed. API 회귀 4건은 `--collect-only`로 수집 확인했으며 실행하지 않았다.
+  `..\.venv\Scripts\python.exe -m pytest -q -ra tests/unit`: 65 passed,
+  47 skipped(격리 DB 연결 불가).
+  `..\.venv\Scripts\python.exe scripts/check_code_conventions.py`: 72개 Python 파일
+  검사 통과. `pip check` 통과. `POSTGRES_TEST_URL` 미설정, 기본
+  `localhost:5432/zerotrust_test`와 과거 전용
+  `127.0.0.1:55439/zerotrust_test` 모두 리스너가 없어 폐기 가능한 격리 DB를
+  확인하지 못했다. DB 초기화·API 회귀와 실제 화면 실증은 **검증 대기**.
