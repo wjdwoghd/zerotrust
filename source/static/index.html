@@ -1969,7 +1969,7 @@
                                             <p className={masked ? 'blur-strong' : ''}>사건번호: <span className="text-slate-700">{caseItem.case_number}</span></p>
                                             <p className={masked ? 'blur-strong' : ''}>자료유형: <span className="text-slate-700">{caseItem.data_type}</span></p>
                                             <p className={masked ? 'blur-strong' : ''}>부서: <span className="text-slate-700">{caseItem.department}</span></p>
-                                            <p className={`text-sm leading-relaxed ${masked ? 'blur-strong' : 'text-slate-500'}`}>{caseItem.description || '설명 없음'}</p>
+                                            <p className="text-sm leading-relaxed text-slate-500">설명은 상세 열람 권한 확인 후 표시됩니다.</p>
                                         </div>
 
                                         {masked && (
@@ -2274,8 +2274,10 @@
                                 scoring: data.scoring || prev.scoring,
                                 resource: data.resource
                                     ? { ...previousResource, ...nextResource,
-                                        content: permissionsChanged
-                                            ? undefined : previousResource.content }
+                                        content: permissionsChanged || !data.decision?.can_view
+                                            ? undefined : previousResource.content,
+                                        description: permissionsChanged || !data.decision?.can_view
+                                            ? undefined : previousResource.description }
                                     : prev.resource,
                                 external_message: '',
                                 policy_check: null,
@@ -2758,6 +2760,9 @@
                                 <p className="font-semibold">{resource?.department}</p>
                             </div>
                         </div>
+                        {decision?.can_view && resource?.description && (
+                            <p className="mt-4 text-sm text-slate-600">{resource.description}</p>
+                        )}
                     </div>
 
                     {/* Scoring Breakdown */}

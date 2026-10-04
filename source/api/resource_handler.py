@@ -19,8 +19,8 @@ class CaseListHandler(BaseHandler):
         db = get_db()
 
         # 사건 목록은 제로트러스트 시연 폭을 위해 넓게 제공하되,
-        # 목록 단계에서는 상세 설명(description) 같은 민감 본문성 정보는 내려주지 않는다.
-        # 실제 상세 내용은 /api/resources/cases/<id> 에서 매 요청 접근평가 후 마스킹되어 반환된다.
+        # 목록에서는 본문성 정보인 description/content 를 조회하거나 반환하지 않는다.
+        # 상세 내용은 /api/resources/cases/<id> 의 접근평가 후에만 반환된다.
         # 목록 화면에서 담당 사건은 업무 편의상 기본 정보를 보여주고,
         # 비담당 사건은 카드 자체는 노출하되(탐색/반복 접근 탐지 가능),
         # 민감 메타데이터는 브라우저로도 최소한만 내려주도록 제한한다.
@@ -28,7 +28,7 @@ class CaseListHandler(BaseHandler):
         # 응답 개수로 등급을 역추론할 수 있다. 목록은 항상 전체를 내려주고,
         # 비담당 사건의 민감 등급은 클라이언트로도 보내지 않는다.
         rows = db.execute(
-            "SELECT id, case_number, title, description, sensitivity_grade, "
+            "SELECT id, case_number, title, sensitivity_grade, "
             "       data_type, department, requires_approval, created_at "
             "FROM resources ORDER BY sensitivity_grade, id"
         ).fetchall()
@@ -66,7 +66,6 @@ class CaseListHandler(BaseHandler):
                 "id": r["id"],
                 "case_number": r["case_number"] if is_assigned_case else "비공개",
                 "title": r["title"],
-                "description": (r.get("description") or "") if is_assigned_case else "상세 내용은 접근 평가 후 표시됩니다.",
                 "sensitivity_grade": r["sensitivity_grade"] if is_assigned_case else None,
                 "sensitivity_grade_masked": not is_assigned_case,
                 "data_type": r["data_type"] if is_assigned_case else "비공개",

@@ -10,8 +10,8 @@ from core.decision_engine import get_action_permissions
 MASKING_LEVELS = {
     1: {"name": "없음", "description": "전체 정보 열람 가능"},
     2: {"name": "워터마크", "description": "열람 가능, 다운로드/복사 차단, 워터마크 표시"},
-    3: {"name": "부분 마스킹", "description": "이름/사건번호 부분 가림"},
-    4: {"name": "요약만 표시", "description": "상세 내용 숨김, 요약 정보만 표시"},
+    3: {"name": "재인증 필요", "description": "재인증 전 본문 비공개"},
+    4: {"name": "관리자 승인 필요", "description": "승인 전 본문 비공개"},
     5: {"name": "완전 차단", "description": "내용 접근 불가"},
 }
 
@@ -54,26 +54,13 @@ def mask_phone(phone: str) -> str:
 
 
 def mask_content(content: str, level: int) -> str:
-    """본문 마스킹 적용"""
+    """열람 가능한 단계의 본문만 반환하고 인증·승인 전에는 비운다."""
     if level == 1:
         return content
     elif level == 2:
         return content  # 워터마크는 프론트에서 처리
-    elif level == 3:
-        # 부분 마스킹: 이름 패턴, 전화번호 패턴
-        masked = re.sub(r'[가-힣]{2,4}(?=\s*(씨|님|경찰관|형사|수사관))',
-                        lambda m: mask_name(m.group()), content)
-        masked = re.sub(r'01[016789]-?\d{3,4}-?\d{4}',
-                        lambda m: mask_phone(m.group()), masked)
-        masked = re.sub(r'\d{6}-\d{7}',
-                        lambda m: mask_id_number(m.group()), masked)
-        return masked
-    elif level == 4:
-        # 요약만 표시
-        lines = content.split('\n')
-        if len(lines) > 3:
-            return '\n'.join(lines[:3]) + '\n\n[상세 내용은 권한 승인 후 열람 가능합니다]'
-        return content[:200] + '\n\n[상세 내용은 권한 승인 후 열람 가능합니다]'
+    elif level in (3, 4):
+        return ""
     else:
         return "[접근 권한이 없습니다. 관리자에게 문의하세요.]"
 
@@ -95,6 +82,12 @@ def apply_masking(resource: dict, decision_level: int, user_name: str = "") -> d
         result["content"] = "[접근이 차단되었습니다]"
         result["description"] = "[접근이 차단되었습니다]"
         return result
+
+    # L3/L4 는 열람 권한이 없다. 부분 마스킹/요약이라도 응답에 본문성
+    # 필드를 실으면 인증·승인 전 미리보기가 되므로 필드 자체를 제외한다.
+    if decision_level in (3, 4):
+        result.pop("content", None)
+        result.pop("description", None)
 
     if "content" in result and result["content"]:
         result["content"] = mask_content(result["content"], decision_level)

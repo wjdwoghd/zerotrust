@@ -59,7 +59,25 @@ Windows 설치 파일 빌드, GitHub Release 초안 생성을 연결한다.
 
 [POLICY](docs/POLICY.md)의 미확정 항목을 합의한 뒤 별도 작업으로 수행한다.
 릴리스 준비 단계에서는 L3/L4 본문, OTP 승인 조건, 응답 축약, 행동 가산점을
-변경하지 않았다. 각 후속 정책 작업은 별도 브랜치에서 진행한다.
+변경하지 않았다. 이후 작업의 정책과 검증 상태는 아래 항목에서 추적한다.
+
+### L3/L4 문서 본문 공개 정합성 — 검증 대기
+
+목표: 재인증·관리자 승인 전 미리보기를 허용하지 않는 확정 정책을 목록·상세·
+상태 조회·다운로드 평가·파일 다운로드·복사 응답과 화면에 일관되게 적용한다.
+완료 조건: 목록에 설명·본문이 없고, L3/L4 상세·다운로드 평가에는 두 필드가
+없으며 파일·복사는 거부된다. L3 재인증과 L4 승인 후에는 승인된 L1/L2 범위에서
+본문 열람·다운로드·복사가 동작하고, 상태 갱신은 저장된 본문을 제거한다.
+
+- 2026-10-04 로컬 작업: 서버 반환 필드와 목록·상태 갱신 화면을 수정하고
+  DB 비의존 단위 테스트 및 실제 API 회귀 시나리오를 추가했다.
+  `.\.venv\Scripts\python.exe scripts/check_code_conventions.py`: 74개 Python 파일 검사 통과.
+  `.\.venv\Scripts\python.exe -m pytest -q tests/unit/test_document_body_policy.py
+  tests/unit/test_copy_handler.py tests/unit/test_access_evaluator_structure.py
+  tests/unit/test_decision_matrix.py`: 46 passed. `POSTGRES_TEST_URL` 미설정,
+  기본 대상 `localhost:5432/zerotrust_test`의 리스너 부재로 폐기 가능한
+  격리 PostgreSQL 연결을 확인하지 못해 실제 API 회귀 시나리오는 미실행이다.
+- 최종 통합 검증과 실제 화면 실증은 추후 한 번에 수행할 예정이므로 **검증 대기**.
 
 ### 다운로드·복사 시도의 행동 위험도 — 검증 대기
 
