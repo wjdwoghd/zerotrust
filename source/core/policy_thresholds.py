@@ -20,6 +20,8 @@ scoring_engine 과 decision_engine 의 모든 가중치를 DB(`policy_thresholds
 from __future__ import annotations
 
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Dict, Iterable, Optional, Tuple
 
 
@@ -30,16 +32,11 @@ _CACHE_LOADED_AT: float = 0.0
 _CACHE_TTL_SEC = 300  # 5분
 _LAST_RELOAD_FAILURE_AT: float = 0.0
 _RELOAD_FAILURE_BACKOFF_SEC = 5.0
+_SIMULATION_SNAPSHOT = ContextVar("policy_simulation_snapshot", default=None)
 
 
-def _reload() -> None:
-    """DB 에서 임계값 + override multiplier 모두 로드 + 캐시 갱신.
-
-    실패 시 예외 raise — caller 가 처리. 운영 중엔 graceful fallback
-    위해 get() 이 잡는다.
-    """
-    global _CACHE, _OVERRIDES_CACHE, _CACHE_LOADED_AT
-    global _LAST_RELOAD_FAILURE_AT
+def _load_from_db(*, strict_overrides: bool = False) -> tuple[Dict[str, float], Dict[Tuple[str, str], float]]:
+    """임계값과 override를 DB에서 읽어 반환한다. 호출자가 캐시 적용을 결정한다."""
     from database import get_db
     db = get_db()
     try:
@@ -59,14 +56,22 @@ def _reload() -> None:
                 for r in override_rows
             }
         except Exception:
+            if strict_overrides:
+                raise
             new_overrides = {}
     finally:
         try:
             db.close()
         except Exception:
             pass
-    _CACHE = new_cache
-    _OVERRIDES_CACHE = new_overrides
+    return new_cache, new_overrides
+
+
+def _reload() -> None:
+    """DB 값을 일반 접근 경로의 5분 캐시에 적용한다."""
+    global _CACHE, _OVERRIDES_CACHE, _CACHE_LOADED_AT
+    global _LAST_RELOAD_FAILURE_AT
+    _CACHE, _OVERRIDES_CACHE = _load_from_db()
     _CACHE_LOADED_AT = time.time()
     _LAST_RELOAD_FAILURE_AT = 0.0
 
@@ -104,22 +109,44 @@ def get(name: str, default: float = 0.0,
 
     DB 연결 실패 시 default fallback.
     """
-    _ensure_loaded()
-    base = _CACHE.get(name, default) if _CACHE else default
+    snapshot = _SIMULATION_SNAPSHOT.get()
+    if snapshot is None:
+        _ensure_loaded()
+        values, overrides = _CACHE, _OVERRIDES_CACHE
+    else:
+        values, overrides, defaults_used = snapshot
+        if name not in values:
+            values[name] = default
+            defaults_used.add(name)
+    base = values.get(name, default)
 
     if not categories:
         return base
 
     # multiplier 매칭
     multipliers = [
-        _OVERRIDES_CACHE[(c, name)]
+        overrides[(c, name)]
         for c in categories
-        if (c, name) in _OVERRIDES_CACHE
+        if (c, name) in overrides
     ]
     if not multipliers:
         return base
     # 가장 작은 multiplier — 사용자에게 가장 유리한 (페널티 최소화) 정책
     return base * min(multipliers)
+
+
+@contextmanager
+def simulation_snapshot():
+    """DB 정책을 새로 읽고 호출 문맥에 고정한다. 조회 실패 시 닫힌 채 실패한다."""
+    values, overrides = _load_from_db(strict_overrides=True)
+    if not values:
+        raise RuntimeError("policy_thresholds is empty")
+    defaults_used = set()
+    token = _SIMULATION_SNAPSHOT.set((values, overrides, defaults_used))
+    try:
+        yield values, overrides, defaults_used
+    finally:
+        _SIMULATION_SNAPSHOT.reset(token)
 
 
 def get_multiplier(category: str, name: str) -> Optional[float]:
