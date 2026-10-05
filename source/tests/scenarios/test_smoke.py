@@ -71,8 +71,7 @@ class TestSmokeResourceAccess:
         for case in restricted_cases:
             assert case.get("title")
             assert case.get("title") != "비공개 사건"
-            assert case.get("sensitivity_grade") is None
-            assert case.get("sensitivity_grade_masked") is True
+            assert set(case) == {"id", "title", "is_assigned_case"}
 
     def test_admin_views_low_sens_resource(self, http, db, login_as):
         """관리자가 등급 1~2 자원 조회 — 마찰 없이."""
@@ -114,9 +113,10 @@ class TestSmokeResourceAccess:
         assert code == 200, data
         assert "policy_check" not in data
         assert "anomaly_check" not in data
-        assert "details" not in (data.get("scoring", {}).get("environment_risk") or {})
-        assert "raw_total_risk_score" not in data["scoring"]["total"]
-        assert data["decision"]["display_risk_score"] == data["decision"]["risk_score"]
+        assert "scoring" not in data
+        assert "decision" not in data
+        assert "resource" not in data
+        assert data["status"] in {"ALLOW", "VERIFY", "DENY"}
 
         after_access = db.execute(
             "SELECT COUNT(*) AS c FROM access_logs WHERE user_id=?",
@@ -144,7 +144,16 @@ class TestSmokeResourceAccess:
 
     def test_repeated_unassigned_case_clicks_raise_behavior_risk(self, http, db, login_as):
         """비담당 사건 첫 클릭은 경고만, 이후 클릭은 회당 행동위험도 +10."""
+        from core.access_evaluator import evaluate_access
+
         tok, _, _ = login_as("detective_kim")
+        user_id = db.execute(
+            "SELECT id FROM users WHERE username='detective_kim'"
+        ).fetchone()["id"]
+        session_id = db.execute(
+            "SELECT id FROM sessions WHERE user_id=? AND is_active=TRUE "
+            "ORDER BY id DESC LIMIT 1", (user_id,),
+        ).fetchone()["id"]
         assigned_id = db.execute(
             "SELECT id FROM resources WHERE case_number='2026-VCT-0300'",
         ).fetchone()["id"]
@@ -152,50 +161,47 @@ class TestSmokeResourceAccess:
             "SELECT id FROM resources WHERE case_number='2026-ADM-0001'",
         ).fetchone()["id"]
 
-        code, baseline = http(
-            "GET", f"/api/resources/cases/{assigned_id}/status",
-            token=tok, device="registered-001", location="본청",
-        )
-        assert code == 200, baseline
-        base_behavior = baseline["scoring"]["behavior_risk"]["score"]
+        def behavior_score():
+            result = evaluate_access(
+                user_id=user_id, resource_id=assigned_id, session_id=session_id,
+                device_id="registered-001", location="본청", action_type="view",
+                is_night=False, hour=14, record_access=False,
+                mutate_state=False, include_resource_body=False,
+            )
+            return result["scoring"]["behavior_risk"]["score"]
+
+        base_behavior = behavior_score()
 
         code, first = http(
             "POST", f"/api/resources/cases/{unassigned_id}/restricted-click",
             token=tok, device="registered-001", location="본청", body={},
         )
         assert code == 200, first
-        assert first["click_index"] == 1
-        assert first["behavior_penalty"] == 0
+        assert first == {"recorded": True}
 
         code, second = http(
             "POST", f"/api/resources/cases/{unassigned_id}/restricted-click",
             token=tok, device="registered-001", location="본청", body={},
         )
         assert code == 200, second
-        assert second["click_index"] == 2
-        assert second["behavior_penalty"] == 10
+        assert second == {"recorded": True}
 
+        assert behavior_score() == base_behavior + 10
         code, after = http(
             "GET", f"/api/resources/cases/{assigned_id}/status",
             token=tok, device="registered-001", location="본청",
         )
         assert code == 200, after
-        assert after["scoring"]["behavior_risk"]["score"] == base_behavior + 10
+        assert "scoring" not in after
 
         code, third = http(
             "POST", f"/api/resources/cases/{unassigned_id}/restricted-click",
             token=tok, device="registered-001", location="본청", body={},
         )
         assert code == 200, third
-        assert third["click_index"] == 3
-        assert third["behavior_penalty"] == 20
+        assert third == {"recorded": True}
 
-        code, after_third = http(
-            "GET", f"/api/resources/cases/{assigned_id}/status",
-            token=tok, device="registered-001", location="본청",
-        )
-        assert code == 200, after_third
-        assert after_third["scoring"]["behavior_risk"]["score"] == base_behavior + 20
+        assert behavior_score() == base_behavior + 20
 
     def test_seed_assigned_cases_match_department_and_job_scope(self, db):
         """시드 담당 사건은 부서/직무 모순 없이 모든 문서를 커버한다."""

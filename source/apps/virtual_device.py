@@ -393,7 +393,7 @@ def _parse_args() -> argparse.Namespace:
 
 
 def launch(account: str, device_id: str, api_key: str,
-           base_url: str = "http://127.0.0.1:8000") -> int:
+           base_url: str = "http://localhost:8000") -> int:
     """
     프로그래매틱 진입점. argparse 를 거치지 않고 바로 GUI 기동한다.
     per-계정 .pyw 런처가 이 함수를 호출한다.

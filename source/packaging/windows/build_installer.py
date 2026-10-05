@@ -23,10 +23,13 @@ TEMP_INSTALLER = BUILD / "ZeroTrustDemoSetup.exe"
 
 APP_PATHS = [
     "api",
-    "apps",
+    "apps/virtual_device.py",
     "core",
     "migrations",
-    "scripts",
+    "scripts/__init__.py",
+    "scripts/regenerate_launchers.py",
+    "scripts/run_migrations.py",
+    "scripts/wipe_traces.py",
     "security",
     "static",
     "config.py",
@@ -170,7 +173,16 @@ def copy_postgres(src: Path, dst: Path) -> None:
 
 def copy_python(src: Path, dst: Path) -> None:
     log(f"copy Python runtime: {src}")
-    shutil.copytree(src, dst, ignore=ignore_names)
+    def ignore_runtime_names(directory: str, names: list[str]) -> set[str]:
+        ignored = ignore_names(directory, names)
+        relative = Path(directory).relative_to(src)
+        if relative == Path("."):
+            ignored.add("Scripts")
+        elif relative == Path("Lib"):
+            ignored.add("site-packages")
+        return ignored
+
+    shutil.copytree(src, dst, ignore=ignore_runtime_names)
 
 
 def ci_matches(root: Path, pattern: str) -> list[Path]:
@@ -258,6 +270,7 @@ def copy_app() -> None:
     ensure_icons()
     for rel in APP_PATHS:
         copy_path(ROOT / rel, PAYLOAD / rel)
+    (PAYLOAD / "apps" / "launchers").mkdir(parents=True, exist_ok=True)
     for name in CONTROL_FILES:
         copy_path(PACKAGING / name, PAYLOAD / name)
     copy_path(PACKAGING / "icons", PAYLOAD / "icons")

@@ -64,9 +64,12 @@ start "" {pythonw} apps\\virtual_device.py --account {account} --device-id {devi
 
 
 def _normalize_base_url() -> str:
-    # 서버 포트는 config.SERVER_PORT. 기본 8000. 환경변수 우선.
+    # 설치 실행기가 선택한 URL 우선. 소스 실행에서는 SERVER_PORT 사용.
+    configured = os.environ.get("ZT_BASE_URL")
+    if configured:
+        return configured.rstrip("/")
     port = os.environ.get("SERVER_PORT", "8000")
-    return f"http://127.0.0.1:{port}"
+    return f"http://localhost:{port}"
 
 
 def _pythonw_command() -> str:
@@ -176,7 +179,7 @@ def regenerate() -> int:
         "이 디렉터리의 런처 파일들도 함께 재작성됩니다.\n\n"
         "## macOS / Linux\n\n"
         "`.pyw` 대신 `python3 apps/virtual_device.py --account <u> --device-id <tok> "
-        "--api-key <k> --base-url http://127.0.0.1:8000` 로 실행해도 동일합니다. "
+        "--api-key <k> --base-url http://localhost:8000` 로 실행해도 동일합니다. "
         "macOS 에서 더블클릭 앱 형태가 필요하면 Automator 또는 py2app 를 참고하세요.\n",
         encoding="utf-8",
     )

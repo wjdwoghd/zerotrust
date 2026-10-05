@@ -1,47 +1,40 @@
-"""접근 점수 - 레벨 - 행동 권한 일관성 회귀 테스트."""
+"""일반 사건 API의 공개 상태와 행동 권한 일관성 회귀 테스트."""
 from __future__ import annotations
 
 import json
 
-from core.decision_engine import get_action_permissions, get_score_band_for_level
 from security.mfa_service import generate_secret, generate_totp
 
 
 def _assert_consistent(payload: dict) -> None:
-    decision = payload.get("decision") or {}
-    resource = payload.get("resource") or {}
-    scoring = payload.get("scoring") or {}
-    level = int(decision.get("level", 5) or 5)
-    score_level = int(decision.get("score_level", level) or level)
-    override = decision.get("override")
-    expected_permissions = get_action_permissions(level)
-
-    score = float(decision.get("display_risk_score", decision.get("risk_score", 0)) or 0)
-    lo, hi = get_score_band_for_level(score_level)
-    assert lo <= score <= hi, (
-        f"score-level mismatch: score_level={score_level}, score={score}, band=({lo}, {hi}), "
-        f"decision={decision}"
-    )
-    assert float(decision.get("risk_score", score)) == score
-    assert decision.get("display_risk_score") == score
-    if not override:
-        assert level == score_level, f"non-override level mismatch: {decision}"
-
-    assert decision.get("action_permissions") == expected_permissions
-    for key, expected in expected_permissions.items():
-        assert decision.get(key) is expected, f"decision {key} mismatch: {decision}"
-        if resource:
-            assert resource.get(key) is expected, f"resource {key} mismatch: {resource}"
-
-    if resource:
-        assert int(resource.get("masking_level", level) or level) == level
-
-    total = scoring.get("total") or {}
-    if total:
-        assert float(total.get("total_risk_score", score)) == score
-        assert int(total.get("score_level", score_level) or score_level) == score_level
-        assert int(total.get("decision_level", level) or level) == level
-        assert total.get("action_permissions") == expected_permissions
+    assert set(payload) in ({"request_id", "status", "external_message", "actions"},
+                            {"request_id", "status", "external_message", "actions", "resource"})
+    status = payload["status"]
+    actions = payload["actions"]
+    assert set(actions) == {
+        "can_view", "can_download", "can_copy", "can_print",
+        "reauthenticate", "request_approval", "attempt_break_glass",
+        "release_break_glass",
+    }
+    assert all(isinstance(value, bool) for value in actions.values())
+    assert not actions["can_download"] or actions["can_view"]
+    assert not actions["can_copy"] or actions["can_view"]
+    assert not actions["can_print"] or actions["can_view"]
+    if status == "ALLOW":
+        assert actions["can_view"] is True
+        assert not actions["reauthenticate"] and not actions["request_approval"]
+    elif status == "VERIFY":
+        assert actions["can_view"] is False
+        assert actions["reauthenticate"] != actions["request_approval"]
+    else:
+        assert status == "DENY"
+        assert actions["can_view"] is False
+        assert not actions["reauthenticate"] and not actions["request_approval"]
+    if "resource" in payload:
+        if actions["can_view"]:
+            assert "content" in payload["resource"]
+        else:
+            assert set(payload["resource"]) == {"id", "title"}
 
 
 def _assign_case(db, username: str, resource_id: int) -> None:
@@ -91,8 +84,8 @@ def test_level1_assigned_resource_allows_file_download(http, login_as, db):
     )
     assert code == 200, detail
     _assert_consistent(detail)
-    assert detail["decision"]["level"] == 1
-    assert detail["resource"]["can_download"] is True
+    assert detail["status"] == "ALLOW"
+    assert detail["actions"]["can_download"] is True
 
     code, downloaded = http(
         "GET", f"/api/resources/cases/{rid}/file",
@@ -103,7 +96,7 @@ def test_level1_assigned_resource_allows_file_download(http, login_as, db):
 
 
 def test_realtime_status_moves_permissions_with_dynamic_score(http, login_as, db):
-    """동적 점수 변화에도 status 의 점수/레벨/행동권한은 한 매트릭스를 따라야."""
+    """동적 점수 변화에도 공개 상태와 허용 행동은 일관되어야 한다."""
     tok, code, data = login_as("officer_choi")
     assert code == 200, data
 
@@ -136,11 +129,12 @@ def test_realtime_status_moves_permissions_with_dynamic_score(http, login_as, db
     )
     assert code == 200, after
     _assert_consistent(after)
-    assert after["decision"]["level"] >= before["decision"]["level"]
+    assert after["actions"]["can_view"] <= before["actions"]["can_view"]
+    assert after["actions"]["can_download"] <= before["actions"]["can_download"]
 
 
 def test_all_seed_accounts_all_documents_have_consistent_status(http, login_as, db):
-    """7개 시드 계정 x 전체 문서의 표시점수/레벨/행동권한 밴드 일치."""
+    """7개 시드 계정 x 전체 문서의 공개 상태·행동권한 일치."""
     accounts = {
         "detective_kim": "registered-001",
         "investigator_park": "registered-003",

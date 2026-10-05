@@ -20,6 +20,13 @@ from core.audit_events import AuditEvent, audit_log
 from security.mfa_service import verify_totp, verify_totp_consume
 
 
+def _public_activation(record: dict) -> dict:
+    """발동자 화면에 필요한 활성 범위와 만료 정보만 반환한다."""
+    return {key: record.get(key) for key in (
+        "id", "scope", "resource_id", "min_grade", "expires_at", "status",
+    )}
+
+
 # =====================================================================
 # 사용자 엔드포인트
 # =====================================================================
@@ -119,7 +126,7 @@ class BreakGlassActivateHandler(BaseHandler):
 
             self.write_json({
                 "message": "Break-Glass 발동 완료",
-                "activation": record,
+                "activation": _public_activation(record),
             })
         finally:
             db.close()
@@ -135,7 +142,10 @@ class BreakGlassMyActiveHandler(BaseHandler):
         db = get_db()
         try:
             active = bg.get_active_for_user(db, user["user_id"])
-            self.write_json({"activations": active, "total": len(active)})
+            self.write_json({
+                "activations": [_public_activation(record) for record in active],
+                "total": len(active),
+            })
         finally:
             db.close()
 
