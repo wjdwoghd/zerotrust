@@ -50,11 +50,11 @@ Windows 설치 파일 빌드, GitHub Release 초안 생성을 연결한다.
   [develop Actions](https://github.com/wjdwoghd/zerotrust/actions/workflows/release.yml?query=branch%3Adevelop)와
   [main Actions](https://github.com/wjdwoghd/zerotrust/actions/workflows/release.yml?query=branch%3Amain)에서
   커밋별로 확인한다. develop 성공 후 main 반영, main 전체 회귀 성공을 순서대로 확인한다.
-- v1.0.1 태그 및 Release 생성: 보류. 모든 검증 후 태그를 생성한다는
-  작업 조건에 따라 깨끗한 Windows 설치 확인 전에는 태그를 만들지 않는다.
-- 깨끗한 Windows 환경에서 설치·바로가기·로그인/OTP·서버 종료: 검증 대기.
-  현 환경에 Windows Sandbox 없음. GitHub Actions의 임시 Windows 러너에
-  실제 EXE 설치·시작·종료 검사를 추가했으며, 실행 결과와 화면 흐름은 검증 대기.
+- v1.0.1 태그 및 Release: 사용자 승인에 따라 진행. 태그 빌드와 Release에는
+  실제 Windows 설치·화면 흐름 미검증을 명시한다.
+- 깨끗한 Windows 환경의 설치·바로가기·로그인/OTP·서버 종료: 미검증.
+  비대화형 러너에서 설치 잠금이 해제되지 않아 자동 검사가 실패했다.
+  v1.0.1에서만 생략하며 이후 버전의 검사 조건은 유지한다.
 - 2026-10-05 후보 재검증: `feat/localhost-token-connection`에서 설치 실행기의
   포트 충돌 처리와 서비스 식별 확인, 설치 내용 최소화를 보완했다. 새 격리
   PostgreSQL 18.6(`127.0.0.1:55441/zerotrust_test`)에서 전체 회귀
