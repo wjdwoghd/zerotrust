@@ -177,9 +177,11 @@ Virtual Token Device (Tkinter)
         └─ API key로 OTP 요청 폴링 및 현재 TOTP 표시
 ```
 
+위 토큰 기기용 API key는 내부 기기 인증에 사용하는 값으로 OpenAI API 키와 다릅니다.
+
 ### 기술 스택
 
-현재 배포된 v1은 Flask, Streamlit 또는 머신러닝 모델을 사용하지 않습니다. 정책의 근거와 시연 결과를 추적하기 쉽도록 **Tornado API + 규칙 기반 위험 점수 엔진 + PostgreSQL** 구조를 사용합니다. 관리자용 AI 정책 도전자는 [v2 작업 계획](ROADMAP.md#v2-준비--ai-정책-도전자)에 설계된 후속 기능이며 아직 구현되지 않았습니다.
+**v1은 OpenAI API를 전혀 호출하지 않으며 `OPENAI_API_KEY`가 필요하지 않습니다.** Flask, Streamlit 또는 머신러닝 모델도 사용하지 않고 **Tornado API + 규칙 기반 위험 점수 엔진 + PostgreSQL**로 동작합니다. OpenAI API를 사용하는 관리자용 AI 정책 도전자는 [v2 작업 계획](ROADMAP.md#v2-준비--ai-정책-도전자)에 설계된 후속 기능이며 아직 구현되지 않았습니다. v2에서도 접근 결정은 기존 규칙 기반 엔진이 담당합니다.
 
 | 구분 | 기술 | 적용 목적 |
 |---|---|---|
