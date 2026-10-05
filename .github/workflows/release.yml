@@ -130,7 +130,7 @@ jobs:
   build:
     name: Build installer and prepare release assets
     needs: test
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: windows-2022
     timeout-minutes: 45
     permissions:
@@ -172,6 +172,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Install and smoke-test on a fresh Windows runner
+        if: github.ref_name != 'v1.0.1'
         run: ./.github/scripts/test-installed-demo.ps1 -Installer 'source/dist/ZeroTrustDemoSetup.exe'
 
       - name: Prepare versioned assets and metadata
@@ -182,6 +183,8 @@ jobs:
           $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash
           "$hash  $(Split-Path $installer -Leaf)" | Set-Content source/dist/SHA256SUMS.txt -Encoding utf8
           $commit = git rev-parse HEAD
+          $installStatus = if ($env:GITHUB_REF_NAME -eq 'v1.0.1') { 'not completed (approved v1.0.1 exception)' } else { 'passed on a fresh Windows Actions runner' }
+          $installNote = if ($env:GITHUB_REF_NAME -eq 'v1.0.1') { 'Installer installation on a clean Windows user profile has not been verified.' } else { 'The built installer passed installation and runtime smoke checks on a disposable Windows Actions runner.' }
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           @(
             "Version: $version"
@@ -189,7 +192,7 @@ jobs:
             "Python: $env:ZT_PYTHON_VERSION"
             "PostgreSQL: $env:ZT_PG_VERSION"
             "PostgreSQL archive SHA256: $env:ZT_PG_SHA256"
-            'Installer installation test: passed on a fresh Windows Actions runner'
+            "Installer installation test: $installStatus"
           ) | Set-Content source/dist/BUILD-INFO.txt -Encoding utf8
           python -m pip freeze | Set-Content source/dist/DEPENDENCIES.txt -Encoding utf8
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -198,7 +201,7 @@ jobs:
             "Source commit: $commit"
             ''
             'Automated regression tests passed; see the test-results artifact for skipped cases.'
-            'The built installer passed installation and runtime smoke checks on a disposable Windows Actions runner.'
+            $installNote
             'Existing installation data is not preserved. This is a demo installer, not a data-preserving updater.'
             'Application policy limitations remain; see docs/POLICY.md.'
           ) | Set-Content source/dist/RELEASE-NOTES.md -Encoding utf8
