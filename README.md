@@ -179,7 +179,7 @@ Virtual Token Device (Tkinter)
 
 ### 기술 스택
 
-이 프로젝트는 Flask, Streamlit 또는 머신러닝 모델을 사용하지 않습니다. 정책의 근거와 시연 결과를 추적하기 쉽도록 **Tornado API + 규칙 기반 위험 점수 엔진 + PostgreSQL** 구조를 사용합니다.
+현재 배포된 v1은 Flask, Streamlit 또는 머신러닝 모델을 사용하지 않습니다. 정책의 근거와 시연 결과를 추적하기 쉽도록 **Tornado API + 규칙 기반 위험 점수 엔진 + PostgreSQL** 구조를 사용합니다. 관리자용 AI 정책 도전자는 [v2 작업 계획](ROADMAP.md#v2-준비--ai-정책-도전자)에 설계된 후속 기능이며 아직 구현되지 않았습니다.
 
 | 구분 | 기술 | 적용 목적 |
 |---|---|---|
