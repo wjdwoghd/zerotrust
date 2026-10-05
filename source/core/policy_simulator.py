@@ -38,8 +38,8 @@ _ALLOWED = _REQUIRED | _OPTIONAL_BOOL | {
 _DATA_TYPES = {"summary", "original", "evidence", "internal_memo"}
 
 
-def _validate(conditions: dict) -> dict:
-    """합성 입력의 정확한 타입·범위를 확인하고 상태 기반 필드를 거부한다."""
+def validate_conditions(conditions: dict) -> dict:
+    """합성 입력의 정확한 타입·범위를 확인하고 정규화한 복사본을 반환한다."""
     if not isinstance(conditions, dict):
         raise ValueError("conditions must be an object")
     if any(not isinstance(name, str) for name in conditions):
@@ -71,7 +71,7 @@ def simulate(conditions: dict) -> dict:
     DB 임계값 읽기에 실패하면 예외를 전파한다. 점수는 접근 평가기와 같은
     함수와 입력 매핑을 사용하며, 이 호출은 로그·세션·승인 상태를 쓰지 않는다.
     """
-    c = _validate(conditions)
+    c = validate_conditions(conditions)
     grade = c["sensitivity_grade"]
     assigned = c["is_assigned_case"]
     hour = c.get("hour")
