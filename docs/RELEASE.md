@@ -6,8 +6,9 @@
 별도의 애플리케이션 버전 파일은 없다. 태그를 이동하거나 재사용하지 않는다.
 `v1.0.1` 후보는 `v1.0.0` 이후의 수정·정리와 배포 자동화를 포함한다.
 
-`.github/workflows/release.yml`은 격리 PostgreSQL 테스트가 성공한 뒤 Windows
-installer를 빌드한다. 각 태그의 새 Release **초안**에 다음 파일을 첨부한다.
+`.github/workflows/release.yml`은 격리 PostgreSQL 테스트가 성공한 뒤 임시
+Windows 러너에서 installer를 빌드·설치하고 시작·종료를 검사한다. 각 태그의 새
+Release **초안**에 다음 파일을 첨부한다.
 
 - `ZeroTrustDemoSetup.exe`
 - `SHA256SUMS.txt`: 설치 파일의 SHA-256
@@ -42,8 +43,15 @@ Actions artifact와 실패 로그를 확인한다. 명령 동작은
    출력은 `source/dist/ZeroTrustDemoSetup.exe`다. IExpress가 필요하며,
    Python 런타임과 애플리케이션 의존성, PostgreSQL의 bin/lib/share를 포함한다.
    개인 전역 Python 환경 대신 깨끗한 빌드 런타임을 사용한다.
-6. 태그 전 CI 빌드 검증은 Actions의 Run workflow에서 대상 브랜치를 선택한다.
-   수동 실행은 테스트·빌드·`installer-validation-<run_id>` artifact까지만 생성한다.
+   설치 내용에는 실행용 `run_migrations.py`, `regenerate_launchers.py`,
+   `wipe_traces.py`만 포함한다. `.env`, 기존 DB, 생성된 토큰 런처,
+   테스트·개발 스크립트와 빌드 Python의 기존 `site-packages`가 없는지 확인한다.
+   로컬 `source/dist/`와 저장소 루트의 과거 설치 파일은 배포 기준이 아니며,
+   `BUILD-INFO.txt`의 커밋이 검증한 소스 커밋과 같은지 대조한다.
+6. 태그 전 CI 빌드 검증은 PR 또는 Actions의 Run workflow에서 대상 브랜치를 선택한다.
+   임시 Windows 러너에서 실제 EXE 설치, 바로가기, 서버·DB 준비, 무인증 차단,
+   토큰 런처 주소, 종료를 확인한다. 수동 실행은 테스트·빌드·
+   `installer-validation-<run_id>` artifact까지만 생성한다.
    Release는 만들지 않는다. [수동 실행 안내](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
 7. 검증 결과를 ROADMAP에 기록하고 develop 통합 후 전체 테스트를 다시 실행한다.
    main 반영 후에도 전체 회귀 검증과 CHANGELOG·빌드 조건을 확인한다.
@@ -51,11 +59,11 @@ Actions artifact와 실패 로그를 확인한다. 명령 동작은
    태그 workflow는 형식과 origin/main 포함 여부를 검사한다. 기존 `v1.0.0`은
    수정하지 않는다. 이후 `v1.0.2`, `v1.1.0`, `v2.0.0`도 같은 절차를 사용한다.
 
-## 공개 전 수동 검증과 복구
+## 공개 전 검증과 복구
 
 새 Release 초안의 installer와 체크섬을 내려받아 해시를 대조한다.
-기존 설치·데이터가 없는 Windows 환경에서 설치, 바로가기, 서버 시작·종료,
-로그인·OTP·관리자 승인 흐름을 확인한 뒤 초안을 공개한다. 설치 성공은 운영
+임시 Windows 러너의 실제 설치 검증 결과를 확인하고, 로그인·OTP·관리자 승인
+화면 흐름을 확인한 뒤 초안을 공개한다. 설치 성공은 운영
 보안성 검증을 의미하지 않는다. 정책 한계는 [POLICY](POLICY.md)를 따른다.
 
 현재 설치기는 기존 설치 폴더와 데이터를 교체한다. 데이터 보존형 업데이트가

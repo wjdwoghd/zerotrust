@@ -55,6 +55,7 @@ def test_live_server_healthz(http):
     code, data = http("GET", "/healthz")
     assert code == 200
     assert data["status"] == "ok"
+    assert data["service"] == "zerotrust"
 
 
 def test_live_server_readyz(http):

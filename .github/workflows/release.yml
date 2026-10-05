@@ -130,7 +130,7 @@ jobs:
   build:
     name: Build installer and prepare release assets
     needs: test
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     runs-on: windows-2022
     timeout-minutes: 45
     permissions:
@@ -171,6 +171,9 @@ jobs:
           python packaging/windows/build_installer.py --postgres-source "$env:ZT_PG_ROOT" --python-source $pythonRoot
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Install and smoke-test on a fresh Windows runner
+        run: ./.github/scripts/test-installed-demo.ps1 -Installer 'source/dist/ZeroTrustDemoSetup.exe'
+
       - name: Prepare versioned assets and metadata
         run: |
           $version = $env:ZT_BUILD_VERSION
@@ -186,7 +189,7 @@ jobs:
             "Python: $env:ZT_PYTHON_VERSION"
             "PostgreSQL: $env:ZT_PG_VERSION"
             "PostgreSQL archive SHA256: $env:ZT_PG_SHA256"
-            'Installer installation test: pending'
+            'Installer installation test: passed on a fresh Windows Actions runner'
           ) | Set-Content source/dist/BUILD-INFO.txt -Encoding utf8
           python -m pip freeze | Set-Content source/dist/DEPENDENCIES.txt -Encoding utf8
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -195,7 +198,7 @@ jobs:
             "Source commit: $commit"
             ''
             'Automated regression tests passed; see the test-results artifact for skipped cases.'
-            'Manual installation verification on a disposable Windows environment is required before publication.'
+            'The built installer passed installation and runtime smoke checks on a disposable Windows Actions runner.'
             'Existing installation data is not preserved. This is a demo installer, not a data-preserving updater.'
             'Application policy limitations remain; see docs/POLICY.md.'
           ) | Set-Content source/dist/RELEASE-NOTES.md -Encoding utf8

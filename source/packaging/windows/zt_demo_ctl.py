@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import ctypes
 import os
+import json
 import secrets
 import shutil
+import signal
+import socket
 import subprocess
 import sys
 import time
@@ -10,6 +14,7 @@ import traceback
 import urllib.error
 import urllib.request
 import webbrowser
+from ctypes import wintypes
 from pathlib import Path
 
 
@@ -104,6 +109,11 @@ def _read_env_file() -> dict[str, str]:
     return values
 
 
+if "SERVER_PORT" not in os.environ:
+    SERVER_PORT = _read_env_file().get("SERVER_PORT", SERVER_PORT)
+    BASE_URL = f"http://127.0.0.1:{SERVER_PORT}"
+
+
 def ensure_env_file() -> dict[str, str]:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     values = _read_env_file()
@@ -133,6 +143,8 @@ def app_env() -> dict[str, str]:
     env.update(values)
     env["DATABASE_URL"] = DATABASE_URL
     env["SERVER_PORT"] = SERVER_PORT
+    env["ZT_BIND_ADDRESS"] = "127.0.0.1"
+    env["ZT_BASE_URL"] = BASE_URL
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUTF8"] = "1"
     env["PYTHONNOUSERSITE"] = "1"
@@ -239,7 +251,6 @@ def postgres_log_tail(max_chars: int = 1400) -> str:
     except OSError:
         return ""
     return text[-max_chars:].strip()
-    return result.returncode == 0
 
 
 def wait_for_postgres_ready(timeout_seconds: float = 120.0) -> None:
@@ -327,7 +338,7 @@ def stop_postgres() -> None:
         "-m", "fast",
         "-w",
         "-t", "30",
-    ], check=False)
+    ])
 
 
 def ensure_database() -> None:
@@ -395,22 +406,79 @@ def reset_data() -> None:
 def health_ok() -> bool:
     try:
         with urllib.request.urlopen(f"{BASE_URL}/healthz", timeout=1) as response:
-            return response.status == 200
-    except (urllib.error.URLError, TimeoutError):
+            if response.status != 200:
+                return False
+            payload = json.load(response)
+            return payload.get("status") == "ok" and payload.get("service") == "zerotrust"
+    except (urllib.error.URLError, TimeoutError, ValueError, TypeError):
         return False
 
 
 def pid_alive(pid_text: str) -> bool:
     if not pid_text.isdigit():
         return False
-    result = subprocess.run(
-        ["tasklist", "/FI", f"PID eq {pid_text}"],
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        **subprocess_kwargs(),
-    )
-    return pid_text in (result.stdout or "")
+    if os.name != "nt":
+        try:
+            os.kill(int(pid_text), 0)
+            return True
+        except OSError:
+            return False
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.GetExitCodeProcess.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
+    kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    handle = kernel32.OpenProcess(0x1000, False, int(pid_text))
+    if not handle:
+        return False
+    try:
+        code = wintypes.DWORD()
+        return bool(kernel32.GetExitCodeProcess(handle, ctypes.byref(code))) and code.value == 259
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def _available_server_port(port: int) -> bool:
+    if not 1 <= port <= 65535:
+        return False
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+            if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                listener.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            listener.bind(("127.0.0.1", port))
+            listener.listen()
+        return True
+    except OSError:
+        return False
+
+
+def configure_server_port() -> None:
+    """Choose and persist a local port before seeding token launchers."""
+    global SERVER_PORT, BASE_URL
+    try:
+        preferred = int(SERVER_PORT)
+    except ValueError:
+        raise SystemExit(f"invalid SERVER_PORT: {SERVER_PORT!r}") from None
+
+    if SERVER_PID.exists():
+        pid_text = SERVER_PID.read_text(encoding="utf-8").strip()
+        if pid_alive(pid_text) and health_ok():
+            return
+
+    candidates = (preferred, *range(18080, 18090))
+    selected = next((port for port in candidates if _available_server_port(port)), None)
+    if selected is None:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+            listener.bind(("127.0.0.1", 0))
+            selected = listener.getsockname()[1]
+
+    if selected != preferred:
+        _log(f"port {preferred} unavailable; using {selected}")
+    SERVER_PORT = str(selected)
+    BASE_URL = f"http://127.0.0.1:{selected}"
 
 
 def deactivate_all_sessions(reason: str) -> None:
@@ -465,6 +533,9 @@ def stop_server() -> None:
     if not pid_text:
         SERVER_PID.unlink(missing_ok=True)
         return
+    if not pid_text.isdigit() or not pid_alive(pid_text):
+        SERVER_PID.unlink(missing_ok=True)
+        return
     _log(f"stopping server pid={pid_text}...")
     subprocess.run(
         ["taskkill", "/PID", pid_text, "/T", "/F"],
@@ -472,6 +543,18 @@ def stop_server() -> None:
         stderr=subprocess.DEVNULL,
         **subprocess_kwargs(),
     )
+    for _ in range(10):
+        if not pid_alive(pid_text):
+            break
+        time.sleep(0.2)
+    if pid_alive(pid_text):
+        try:
+            os.kill(int(pid_text), signal.SIGTERM)
+        except OSError as exc:
+            raise SystemExit(f"server process {pid_text} did not stop: {exc}") from exc
+        time.sleep(0.2)
+    if pid_alive(pid_text):
+        raise SystemExit(f"server process {pid_text} did not stop")
     SERVER_PID.unlink(missing_ok=True)
 
 
@@ -510,6 +593,7 @@ def start_server() -> None:
 
 
 def ensure_system_ready() -> None:
+    configure_server_port()
     verify_runtime_dependencies()
     start_postgres()
     ensure_database()
@@ -586,6 +670,7 @@ def reset_and_start() -> None:
     close_browser_windows()
     time.sleep(0.5)
     stop_server()
+    configure_server_port()
     reset_data()
     start_server()
     _launch_browser(BASE_URL, "main")
