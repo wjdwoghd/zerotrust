@@ -181,7 +181,7 @@ Virtual Token Device (Tkinter)
 
 ### 기술 스택
 
-**v1은 OpenAI API를 전혀 호출하지 않으며 `OPENAI_API_KEY`가 필요하지 않습니다.** Flask, Streamlit 또는 머신러닝 모델도 사용하지 않고 **Tornado API + 규칙 기반 위험 점수 엔진 + PostgreSQL**로 동작합니다. OpenAI API를 사용하는 관리자용 AI 정책 도전자는 [v2 작업 계획](ROADMAP.md#v2-준비--ai-정책-도전자)에 설계된 후속 기능이며 아직 구현되지 않았습니다. v2에서도 접근 결정은 기존 규칙 기반 엔진이 담당합니다.
+**v1은 OpenAI API를 전혀 호출하지 않으며 `OPENAI_API_KEY`가 필요하지 않습니다.** Flask, Streamlit 또는 머신러닝 모델도 사용하지 않고 **Tornado API + 규칙 기반 위험 점수 엔진 + PostgreSQL**로 동작합니다. v2 3단계의 [AI 정책 도전자](ROADMAP.md#v2-준비--ai-정책-도전자)는 관리자·부관리자 전용 합성 실험 기능입니다. 실제 접근 결정은 계속 기존 규칙 기반 엔진이 담당하며, AI 설명은 접근 판단 근거가 아닙니다.
 
 | 구분 | 기술 | 적용 목적 |
 |---|---|---|

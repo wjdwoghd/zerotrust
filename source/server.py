@@ -64,6 +64,7 @@ from api.break_glass_handler import (
     AdminBreakGlassReviewHandler, AdminBreakGlassRevokeHandler,
 )
 from api.base_handler import BaseHandler
+from api.policy_lab_handler import PolicyLabChallengeHandler
 
 
 STATIC_PATH = os.path.join(os.path.dirname(__file__), "static")
@@ -256,6 +257,7 @@ def make_app() -> tornado.web.Application:
 
         # Admin API
         (r"/api/admin/approvals/pending", PendingApprovalsHandler),
+        (r"/api/admin/policy-lab/challenges", PolicyLabChallengeHandler),
         (r"/api/admin/approvals/(\d+)/approve", ApproveHandler),
         (r"/api/admin/approvals/(\d+)/reject", RejectHandler),
         (r"/api/admin/case-assignment-requests/pending", CaseAssignmentPendingHandler),
