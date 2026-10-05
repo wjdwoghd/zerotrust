@@ -6,6 +6,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $installRoot = Join-Path $env:LOCALAPPDATA 'ZeroTrustDemo'
 $lockRoot = Join-Path $env:LOCALAPPDATA 'ZeroTrustDemo.install.lock'
+$stageRoot = Join-Path $env:LOCALAPPDATA 'ZeroTrustDemo.installing'
 
 if (Test-Path -LiteralPath $installRoot) {
     throw "The Windows runner is not clean: $installRoot already exists."
@@ -14,20 +15,30 @@ if (-not (Test-Path -LiteralPath $Installer)) {
     throw "Installer is missing: $Installer"
 }
 
-$setup = Start-Process -FilePath (Resolve-Path -LiteralPath $Installer).Path -ArgumentList '/Q:A' -PassThru
-if (-not $setup.WaitForExit(300000)) {
-    Stop-Process -Id $setup.Id -Force -ErrorAction SilentlyContinue
-    throw 'Installer did not finish within five minutes.'
-}
-if ($setup.ExitCode -ne 0) {
-    throw "Installer exited with code $($setup.ExitCode)."
-}
-
 $python = Join-Path $installRoot 'runtime\python\python.exe'
 $controller = Join-Path $installRoot 'zt_demo_ctl.py'
-for ($attempt = 0; $attempt -lt 120; $attempt++) {
-    if ((Test-Path -LiteralPath $python) -and -not (Test-Path -LiteralPath $lockRoot)) { break }
-    Start-Sleep -Seconds 1
+$setup = Start-Process -FilePath (Resolve-Path -LiteralPath $Installer).Path -ArgumentList '/Q:A' -PassThru
+$installed = $false
+for ($attempt = 0; $attempt -lt 24; $attempt++) {
+    if ($setup.HasExited -and $setup.ExitCode -ne 0) {
+        throw "Installer exited with code $($setup.ExitCode)."
+    }
+    if ((Test-Path -LiteralPath $python) -and -not (Test-Path -LiteralPath $lockRoot)) {
+        $installed = $true
+        break
+    }
+    if ($setup.HasExited) {
+        Start-Sleep -Seconds 30
+    } else {
+        [void]$setup.WaitForExit(30000)
+    }
+    if ($attempt % 2 -eq 1) {
+        Write-Output "Installer minute $([int](($attempt + 1) / 2)): lock=$(Test-Path -LiteralPath $lockRoot), staging=$(Test-Path -LiteralPath $stageRoot), installed=$(Test-Path -LiteralPath $installRoot)"
+    }
+}
+if (-not $installed) {
+    Stop-Process -Id $setup.Id -Force -ErrorAction SilentlyContinue
+    throw 'Installer did not create a complete installation within twelve minutes.'
 }
 foreach ($required in @($python, $controller,
         (Join-Path $installRoot 'server.py'),
