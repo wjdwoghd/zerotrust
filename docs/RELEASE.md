@@ -42,6 +42,11 @@ Actions artifact와 실패 로그를 확인한다. 명령 동작은
    출력은 `source/dist/ZeroTrustDemoSetup.exe`다. IExpress가 필요하며,
    Python 런타임과 애플리케이션 의존성, PostgreSQL의 bin/lib/share를 포함한다.
    개인 전역 Python 환경 대신 깨끗한 빌드 런타임을 사용한다.
+   설치 내용에는 실행용 `run_migrations.py`, `regenerate_launchers.py`,
+   `wipe_traces.py`만 포함한다. `.env`, 기존 DB, 생성된 토큰 런처,
+   테스트·개발 스크립트와 빌드 Python의 기존 `site-packages`가 없는지 확인한다.
+   로컬 `source/dist/`와 저장소 루트의 과거 설치 파일은 배포 기준이 아니며,
+   `BUILD-INFO.txt`의 커밋이 검증한 소스 커밋과 같은지 대조한다.
 6. 태그 전 CI 빌드 검증은 Actions의 Run workflow에서 대상 브랜치를 선택한다.
    수동 실행은 테스트·빌드·`installer-validation-<run_id>` artifact까지만 생성한다.
    Release는 만들지 않는다. [수동 실행 안내](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).

@@ -54,6 +54,18 @@ Windows 설치 파일 빌드, GitHub Release 초안 생성을 연결한다.
   작업 조건에 따라 깨끗한 Windows 설치 확인 전에는 태그를 만들지 않는다.
 - 깨끗한 Windows 환경에서 설치·바로가기·로그인/OTP·서버 종료: 검증 대기.
   현 환경에 Windows Sandbox 없음. 빌드 성공을 설치 성공으로 간주하지 않음.
+- 2026-10-05 후보 재검증: `feat/localhost-token-connection`에서 설치 실행기의
+  포트 충돌 처리와 서비스 식별 확인, 설치 내용 최소화를 보완했다. 새 격리
+  PostgreSQL 18.6(`127.0.0.1:55441/zerotrust_test`)에서 전체 회귀
+  **252 passed / 1 skipped**. 건너뛴 1개는 호스트가 KST/+09:00일 때만
+  실행하는 세션 시간대 매트릭스이며 `TZ=Asia/Seoul`로 별도 실행해 통과했다.
+  마이그레이션 재실행 `applied=0`, 코드 규칙
+  74개 파일·`pip check` 통과.
+- 새 Windows installer 빌드와 payload 검사를 통과했다. `.env`·DB·생성 토큰
+  런처·테스트/개발 스크립트가 없음을 확인했다. 압축을 별도 폴더에 풀어 번들
+  Python·PostgreSQL 기동, 마이그레이션·시드, 포트 충돌 시 18080 선택,
+  `/healthz`·`/readyz`·무인증 차단, 토큰 런처 주소 일치와 서버·DB 종료를 확인했다.
+  이는 실제 설치기 실행·바로가기·화면 흐름 검증을 대신하지 않는다.
 
 ## 후속 정책 정합성 — 진행 중
 

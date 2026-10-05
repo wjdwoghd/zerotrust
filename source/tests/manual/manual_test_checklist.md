@@ -34,12 +34,12 @@
 
 ### 1.1 깨끗한 부팅
 ```
-□ scripts\run.bat 실행 — 마이그레이션 014 까지 적용 메시지 출력
-□ "wipe completed" 메시지 출력 (운영 DB 정리 확인 — 시연용일 때만)
-□ "seed completed (7 users / 15 resources)" 출력
+□ 폐기 가능한 시연 DB에서 scripts\run.bat 실행 — 최신 마이그레이션 023 적용 확인
+□ `[wipe] truncated` 메시지 출력 (시연 DB 정리 확인 — 보존할 데이터가 없을 때만)
+□ 시드 생성 완료와 데모 계정·자료 확인
 □ 8000 포트 listen 메시지 출력
-□ http://localhost:8000/healthz 응답 200 + JSON {"ok": true}
-□ http://localhost:8000/readyz 응답 200 + db: "ok"
+□ http://localhost:8000/healthz 응답 200 + JSON {"status":"ok","service":"zerotrust"}
+□ http://localhost:8000/readyz 응답 200 + JSON {"status":"ready","db":"up"}
 ```
 
 ### 1.2 시드 무결성

@@ -93,7 +93,7 @@ class HealthzHandler(tornado.web.RequestHandler):
 
     def get(self):
         self.set_header("Content-Type", "application/json")
-        self.write(json.dumps({"status": "ok"}))
+        self.write(json.dumps({"status": "ok", "service": "zerotrust"}))
 
 
 class ReadyzHandler(tornado.web.RequestHandler):
@@ -349,7 +349,7 @@ if __name__ == "__main__":
         app = make_app()
     except SecretValidationError:
         sys.exit(2)
-    app.listen(SERVER_PORT)
+    app.listen(SERVER_PORT, address=os.getenv("ZT_BIND_ADDRESS") or None)
 
     # SIGTERM / SIGINT — graceful_shutdown 콜백 등록
     for _sig in (signal.SIGTERM, signal.SIGINT):

@@ -64,7 +64,10 @@ start "" {pythonw} apps\\virtual_device.py --account {account} --device-id {devi
 
 
 def _normalize_base_url() -> str:
-    # 서버 포트는 config.SERVER_PORT. 기본 8000. 환경변수 우선.
+    # 설치 실행기가 선택한 URL 우선. 소스 실행에서는 SERVER_PORT 사용.
+    configured = os.environ.get("ZT_BASE_URL")
+    if configured:
+        return configured.rstrip("/")
     port = os.environ.get("SERVER_PORT", "8000")
     return f"http://localhost:{port}"
 
