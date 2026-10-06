@@ -64,6 +64,7 @@ class AuditEvent(str, enum.Enum):
     USER_CREATED        = "USER_CREATED"
     POLICY_LAB_CHALLENGE = "POLICY_LAB_CHALLENGE"
     APPROVAL_AI_REVIEW = "APPROVAL_AI_REVIEW"
+    OTHER_APPROVAL_AI_REVIEW = "OTHER_APPROVAL_AI_REVIEW"
     MFA_SUCCESS       = "MFA_SUCCESS"
     MFA_FAILURE       = "MFA_FAILURE"
 
@@ -113,6 +114,7 @@ _SCHEMAS: Dict[AuditEvent, tuple] = {
     AuditEvent.USER_CREATED:            ("target_user_id", "admin_id", "username", "role"),
     AuditEvent.POLICY_LAB_CHALLENGE:    ("goal", "count", "status", "error_code"),
     AuditEvent.APPROVAL_AI_REVIEW:      ("approval_id", "reviewer_id", "status", "error_code", "model"),
+    AuditEvent.OTHER_APPROVAL_AI_REVIEW: ("review_type", "target_id", "reviewer_id", "status", "error_code", "model"),
     AuditEvent.MFA_SUCCESS:             ("username",),
     AuditEvent.MFA_FAILURE:             ("username", "reason"),
     AuditEvent.SECRET_ROTATED:          ("key_name",),

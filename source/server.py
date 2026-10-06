@@ -64,6 +64,10 @@ from api.break_glass_handler import (
     AdminBreakGlassReviewHandler, AdminBreakGlassRevokeHandler,
 )
 from api.base_handler import BaseHandler
+from api.other_approval_review_handler import (
+    OtherApprovalFactsHandler, OtherApprovalAiHandler, EmergencyAuditCandidatesHandler,
+    RepeatedUnassignedCandidatesHandler,
+)
 from api.policy_lab_handler import PolicyLabChallengeHandler
 
 
@@ -259,6 +263,10 @@ def make_app() -> tornado.web.Application:
         (r"/api/admin/approvals/pending", PendingApprovalsHandler),
         (r"/api/admin/approvals/(\d+)/review-facts", ApprovalReviewFactsHandler),
         (r"/api/admin/approvals/(\d+)/ai-review", ApprovalAiReviewHandler),
+        (r"/api/admin/reviews/(login|assignment|break_glass)/(\d+)/facts", OtherApprovalFactsHandler),
+        (r"/api/admin/reviews/(login|assignment|break_glass)/(\d+)/ai-review", OtherApprovalAiHandler),
+        (r"/api/admin/audit-candidates/emergency-access", EmergencyAuditCandidatesHandler),
+        (r"/api/admin/audit-candidates/repeated-unassigned", RepeatedUnassignedCandidatesHandler),
         (r"/api/admin/policy-lab/challenges", PolicyLabChallengeHandler),
         (r"/api/admin/approvals/(\d+)/approve", ApproveHandler),
         (r"/api/admin/approvals/(\d+)/reject", RejectHandler),
