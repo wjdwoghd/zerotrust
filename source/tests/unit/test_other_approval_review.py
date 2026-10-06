@@ -85,6 +85,19 @@ def test_assignment_reviewer_role_and_missing_audit():
     assert payload["fields"]["request_audit"]["unknown_reason"]
 
 
+def test_missing_assignment_scope_is_unknown_not_mismatch():
+    class MissingDepartment(ReadDb):
+        def execute(self, sql, params=()):
+            result = super().execute(sql, params)
+            if "FROM users" in sql:
+                self.rows[0]["department"] = None
+            return result
+
+    facts = load_review_facts(MissingDepartment("assignment"), "assignment", 10, 2, "admin")
+    assert facts["fields"]["current_scope_compatible"]["value"] is None
+    assert facts["fields"]["current_scope_compatible"]["unknown_reason"] == "current_scope_unavailable"
+
+
 def test_unobserved_alias_and_invalid_decision_are_rejected():
     aliases = {"E1": ("audit_logs", 31)}
     raw = {"review_opinion": "check_further", "items": [], "uncertainties": [],

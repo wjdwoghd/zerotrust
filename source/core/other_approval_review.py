@@ -84,7 +84,7 @@ def load_review_facts(db, review_type, target_id, reviewer_id, reviewer_role):
         # Current compatibility is a separate fact; never infer it from the request.
         user = db.execute("SELECT department, job_scope FROM users WHERE id=?", (row["requester_id"],)).fetchone()
         resource = db.execute("SELECT department, job_tags FROM resources WHERE id=?", (row["resource_id"],)).fetchone()
-        if user and resource:
+        if user and resource and user["department"] and resource["department"]:
             from core.case_assignment_rules import assignment_compatibility
             compatible, _ = assignment_compatibility(user, resource)
             scope_source = {"table": "users", "id": row["requester_id"]}
