@@ -8,6 +8,7 @@ from database import get_db, row_to_dict, rows_to_list
 from config import ADMIN_APPROVAL_TTL_SEC
 from core.audit_events import AuditEvent, audit_log
 from core.case_assignment_rules import assignment_compatibility
+from core.approval_review_facts import load_approval_review_facts, ReviewFactsError
 from security.password_handler import hash_password
 from security.mfa_service import generate_secret
 
@@ -58,6 +59,24 @@ class PendingApprovalsHandler(BaseHandler):
 
         approvals = rows_to_list(rows)
         self.write_json({"approvals": approvals, "total": len(approvals)})
+
+
+class ApprovalReviewFactsHandler(BaseHandler):
+    """GET /api/admin/approvals/<id>/review-facts (read-only)."""
+
+    def get(self, approval_id):
+        reviewer = self.require_admin()
+        if not reviewer:
+            return
+        db = get_db()
+        try:
+            facts = load_approval_review_facts(db, int(approval_id),
+                                               int(reviewer["user_id"]))
+            self.write_json(facts)
+        except ReviewFactsError as exc:
+            self.write_error_json(exc.code, exc.status, code=exc.code)
+        finally:
+            db.close()
 
 
 class ApproveHandler(BaseHandler):

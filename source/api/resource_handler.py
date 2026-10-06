@@ -776,6 +776,7 @@ class CaseApprovalRequestHandler(BaseHandler):
                     "reason": final_reason,
                     "want_download": want_download,
                     "origin": "user_explicit",
+                    "reason_source": "user_input" if reason else "server_default",
                 },
                 severity=2,
                 layer="operation",

@@ -40,7 +40,7 @@ from api.resource_handler import (
     CaseApprovalRequestHandler, CaseAssignmentRequestHandler, MyCaseAssignmentRequestsHandler, CaseAssignmentOtpVerifyHandler,
 )
 from api.admin_handler import (
-    PendingApprovalsHandler, ApproveHandler, RejectHandler,
+    PendingApprovalsHandler, ApprovalReviewFactsHandler, ApproveHandler, RejectHandler,
     CaseAssignmentPendingHandler, CaseAssignmentRequireOtpHandler,
     CaseAssignmentApproveHandler, CaseAssignmentRejectHandler,
     UserListHandler, UnlockUserHandler,
@@ -257,6 +257,7 @@ def make_app() -> tornado.web.Application:
 
         # Admin API
         (r"/api/admin/approvals/pending", PendingApprovalsHandler),
+        (r"/api/admin/approvals/(\d+)/review-facts", ApprovalReviewFactsHandler),
         (r"/api/admin/policy-lab/challenges", PolicyLabChallengeHandler),
         (r"/api/admin/approvals/(\d+)/approve", ApproveHandler),
         (r"/api/admin/approvals/(\d+)/reject", RejectHandler),
