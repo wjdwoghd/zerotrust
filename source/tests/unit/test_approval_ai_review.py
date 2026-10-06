@@ -5,7 +5,7 @@ from core.approval_ai_review import build_model_input, review_response
 from tests.unit.test_approval_review_facts import _ReadDb
 from core.approval_review_facts import load_approval_review_facts, ReviewFactsError
 from integrations.openai_approval_review_client import generate_approval_review
-from integrations.openai_scenario_client import (MissingApiKeyError, ModelOutputError,
+from integrations.openai_review_transport import (MissingApiKeyError, ModelOutputError,
     ModelRefusalError, ModelTimeoutError)
 
 

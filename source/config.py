@@ -119,7 +119,7 @@ SERVER_PORT = int(os.getenv("SERVER_PORT", "8000"))
 TORNADO_DEBUG = False  # 운영 환경 — 디버그 트레이스 비공개
 
 
-# ── v2 AI 정책 도전자 (v1 접근 경로에서는 사용하지 않음) ───────────
+# ── 관리자 승인 AI 참고 검토 (v1 접근 경로에서는 사용하지 않음) ───
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_SCENARIO_MODEL = os.getenv("OPENAI_SCENARIO_MODEL", "gpt-4o-mini")
-OPENAI_SCENARIO_TIMEOUT_SEC = os.getenv("OPENAI_SCENARIO_TIMEOUT_SEC", "20")
+OPENAI_REVIEW_MODEL = os.getenv("OPENAI_REVIEW_MODEL", "gpt-4o-mini")
+OPENAI_REVIEW_TIMEOUT_SEC = os.getenv("OPENAI_REVIEW_TIMEOUT_SEC", "20")

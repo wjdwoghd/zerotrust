@@ -5,7 +5,7 @@ import pytest
 
 from core.approval_review_facts import ReviewFactsError
 from core.other_approval_review import load_review_facts, build_model_input, validate_review
-from integrations.openai_scenario_client import ModelOutputError
+from integrations.openai_review_transport import ModelOutputError
 
 
 NOW = datetime(2026, 10, 6, tzinfo=timezone.utc)

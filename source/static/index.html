@@ -2938,112 +2938,6 @@
             );
         }
 
-        const POLICY_LAB_VALUES = {
-            sensitivity_grade: [1, 2, 3, 4, 5],
-            data_type: ['summary', 'original', 'evidence', 'internal_memo'],
-            device_registered: [false, true], location_allowed: [false, true],
-            is_assigned_case: [false, true], same_department: [false, true],
-            hour: [0, 5, 6, 8, 9, 17, 18, 21, 22, 23],
-            job_relevance: [false, true], bulk_query: [false, true],
-            download_attempt: [false, true], impossible_travel: [false, true],
-            concurrent_session: [false, true], device_mismatch: [false, true],
-            auth_failure: [false, true], recent_access_count: [0, 4, 5, 9, 10, 25],
-            unassigned_click_count: [0, 1, 2, 3],
-        };
-        const POLICY_LAB_ERRORS = {
-            key_not_configured: 'AI 실험 서비스 키가 설정되지 않았습니다.',
-            model_refusal: '모델이 생성을 거부했습니다.',
-            model_timeout: 'AI 실험 서비스 응답 시간이 초과되었습니다.',
-            model_output_invalid: 'AI 출력 형식이 올바르지 않습니다.',
-            model_output_out_of_range: 'AI 출력이 허용 범위를 벗어났습니다.',
-            openai_error: 'AI 실험 서비스 호출에 실패했습니다.',
-            invalid_request: '요청 조건을 확인해 주세요.',
-        };
-
-        function buildPolicyLabPayload(goal, count, allowedValues) {
-            return { goal, count: Number(count), allowed_values: allowedValues };
-        }
-
-        function policyLabErrorMessage(code) {
-            return POLICY_LAB_ERRORS[code] || '실험을 실행할 수 없습니다.';
-        }
-
-        function policyLabResultSections(item) {
-            return {
-                synthetic: item.synthetic_conditions,
-                policy: item.policy_engine_result,
-                explanation: item.ai_explanation,
-            };
-        }
-
-        function PolicyLab({ token }) {
-            const [goal, setGoal] = useState('boundary');
-            const [count, setCount] = useState(1);
-            const [selected, setSelected] = useState({});
-            const [result, setResult] = useState(null);
-            const [error, setError] = useState('');
-            const [busy, setBusy] = useState(false);
-            const toggle = (name, value) => {
-                const current = selected[name] || POLICY_LAB_VALUES[name];
-                const next = current.includes(value)
-                    ? current.filter(item => item !== value) : [...current, value];
-                if (next.length) setSelected({ ...selected, [name]: next });
-            };
-            const run = async () => {
-                setBusy(true); setError(''); setResult(null);
-                try {
-                    const response = await fetch('/api/admin/policy-lab/challenges', {
-                        method: 'POST',
-                        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                        body: JSON.stringify(buildPolicyLabPayload(goal, count, selected)),
-                    });
-                    const data = await response.json();
-                    if (!response.ok) {
-                        setError(policyLabErrorMessage(data.code));
-                    } else {
-                        setResult(data);
-                    }
-                } catch (_) {
-                    setError('실험 서비스에 연결할 수 없습니다.');
-                } finally {
-                    setBusy(false);
-                }
-            };
-            return <div className="space-y-5">
-                <p className="rounded-lg bg-amber-50 p-4 text-amber-900">합성 시뮬레이션이며 실제 접근 권한을 변경하지 않습니다. MFA·관리자 승인·Break-Glass·최종 접근 레벨은 평가하지 않습니다.</p>
-                <div className="flex flex-wrap gap-4 items-end">
-                    <label>실험 목표 <select value={goal} onChange={e => setGoal(e.target.value)} className="block border rounded p-2">
-                        <option value="boundary">점수 경계</option><option value="immediate_block">즉시 차단</option>
-                    </select></label>
-                    <label>시나리오 개수 <input type="number" min="1" max="8" value={count}
-                        onChange={e => setCount(e.target.value)} className="block border rounded p-2 w-24" /></label>
-                    <button disabled={busy || !Number.isInteger(Number(count)) || Number(count) < 1 || Number(count) > 8}
-                        onClick={run} className="bg-police-600 text-white rounded px-4 py-2 disabled:opacity-50">
-                        {busy ? '실행 중…' : '실험 실행'}
-                    </button>
-                </div>
-                <details className="rounded border p-4"><summary className="cursor-pointer font-semibold">합성 조건 허용값 선택</summary>
-                    <div className="grid md:grid-cols-2 gap-3 mt-4">
-                        {Object.entries(POLICY_LAB_VALUES).map(([name, values]) => <fieldset key={name} className="border rounded p-2">
-                            <legend className="font-medium">{name}</legend>
-                            <div className="flex flex-wrap gap-3">{values.map(value => <label key={String(value)} className="text-sm">
-                                <input type="checkbox" checked={(selected[name] || values).includes(value)}
-                                    onChange={() => toggle(name, value)} /> {String(value)}
-                            </label>)}</div>
-                        </fieldset>)}</div>
-                </details>
-                {error && <p role="alert" className="rounded bg-red-50 text-red-800 p-3">{error}</p>}
-                {result?.scenarios?.map((item, index) => <section key={index} className="glass-card rounded-lg p-5 space-y-3">
-                    <h3 className="font-bold">합성 시나리오 {index + 1}</h3>
-                    <div><h4 className="font-semibold">합성 시나리오 입력</h4><pre className="whitespace-pre-wrap break-all text-sm">{JSON.stringify(policyLabResultSections(item).synthetic, null, 2)}</pre></div>
-                    <div><h4 className="font-semibold">서버 정책 엔진 결과</h4><pre className="whitespace-pre-wrap break-all text-sm">{JSON.stringify(policyLabResultSections(item).policy, null, 2)}</pre></div>
-                    <div><h4 className="font-semibold">AI 생성 설명 (정책 판단 근거 아님)</h4><p>{policyLabResultSections(item).explanation}</p></div>
-                    <div><h4 className="font-semibold">평가 범위</h4><p>4축 위험, 즉시 차단, 점수 기반 기본 레벨</p>
-                        <h4 className="font-semibold mt-2">평가하지 않은 범위</h4><p>MFA, 관리자 승인, Break-Glass, 세션 집행, 실제 신원·자료·위치·단말 검증, 최종 접근 레벨</p></div>
-                </section>)}
-            </div>;
-        }
-
         function AdminPage() {
             const auth = useContext(AuthContext);
             const [approvals, setApprovals] = useState([]);
@@ -3789,7 +3683,6 @@
 
                     {/* Tabs */}
                     <div className="flex gap-4 border-b border-slate-200">
-                        <button onClick={() => setTab('policyLab')} className={`py-3 px-4 font-semibold border-b-2 ${tab === 'policyLab' ? 'border-police-600 text-police-600' : 'border-transparent text-slate-600'}`}>AI 정책 도전자</button>
                         <button
                             onClick={() => setTab('approvals')}
                             className={`py-3 px-4 font-semibold border-b-2 transition ${
@@ -3854,7 +3747,6 @@
                     </div>
 
                     {/* Approvals Tab */}
-                    {tab === 'policyLab' && <PolicyLab token={auth.token} />}
                     {tab === 'approvals' && (
                         <div className="space-y-4">
                             <div className="rounded border p-3 text-sm">

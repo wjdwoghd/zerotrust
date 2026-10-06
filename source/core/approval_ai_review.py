@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from integrations.openai_scenario_client import ModelOutputError
+from integrations.openai_review_transport import ModelOutputError
 
 OPINIONS = {"request_more_information", "check_further", "no_issue_identified"}
 MAX_ITEMS = 8

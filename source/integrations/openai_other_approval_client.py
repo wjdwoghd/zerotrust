@@ -6,10 +6,10 @@ import socket
 from urllib.error import HTTPError, URLError
 from urllib.request import Request
 
-from integrations.openai_scenario_client import (
+from integrations.openai_review_transport import (
     RESPONSES_URL, _default_post_json, _extract_output_text,
     MissingApiKeyError, ModelOutputError, ModelTimeoutError,
-    ScenarioGenerationError,
+    ReviewTransportError,
 )
 
 
@@ -41,11 +41,11 @@ def generate_review(*, facts, api_key, model, timeout=20.0, post_json=None):
     try:
         response = (post_json or _default_post_json)(request, timeout)
     except HTTPError as error:
-        raise ScenarioGenerationError("OpenAI HTTP error") from error
+        raise ReviewTransportError("OpenAI HTTP error") from error
     except (TimeoutError, socket.timeout) as error:
         raise ModelTimeoutError("OpenAI timed out") from error
     except URLError as error:
-        raise ScenarioGenerationError("OpenAI network error") from error
+        raise ReviewTransportError("OpenAI network error") from error
     if not isinstance(response, dict):
         raise ModelOutputError("invalid OpenAI response")
     try:

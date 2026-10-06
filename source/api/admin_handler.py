@@ -12,8 +12,8 @@ from core.case_assignment_rules import assignment_compatibility
 from core.approval_review_facts import load_approval_review_facts, ReviewFactsError
 from core.approval_ai_review import build_model_input, review_response
 from integrations.openai_approval_review_client import generate_approval_review
-from integrations.openai_scenario_client import (MissingApiKeyError, ModelOutputError,
-    ModelRefusalError, ModelTimeoutError, ScenarioGenerationError)
+from integrations.openai_review_transport import (MissingApiKeyError, ModelOutputError,
+    ModelRefusalError, ModelTimeoutError, ReviewTransportError)
 from security.password_handler import hash_password
 from security.mfa_service import generate_secret
 
@@ -93,7 +93,7 @@ class ApprovalAiReviewHandler(BaseHandler):
             return
         import config
         aid = int(approval_id)
-        model = config.OPENAI_SCENARIO_MODEL
+        model = config.OPENAI_REVIEW_MODEL
         error_code = None
         result = None
         db = get_db()
@@ -113,7 +113,7 @@ class ApprovalAiReviewHandler(BaseHandler):
             try:
                 raw = await asyncio.to_thread(generate_approval_review,
                     facts=model_input, api_key=config.OPENAI_API_KEY, model=model,
-                    timeout=float(config.OPENAI_SCENARIO_TIMEOUT_SEC))
+                    timeout=float(config.OPENAI_REVIEW_TIMEOUT_SEC))
                 result = review_response(facts, raw, aliases,
                     model_input["past_decisions"]["candidates"], model)
             except MissingApiKeyError:
@@ -125,7 +125,7 @@ class ApprovalAiReviewHandler(BaseHandler):
             except ModelOutputError as error:
                 error_code = "evidence_ref_invalid" if "evidence" in str(error) or "reference" in str(error) else "model_schema_invalid"
                 status = 502
-            except ScenarioGenerationError:
+            except ReviewTransportError:
                 error_code, status = "openai_error", 502
             except OSError:
                 error_code, status = "openai_error", 502

@@ -7,7 +7,7 @@ from tornado.testing import AsyncHTTPTestCase
 from api import admin_handler as admin
 from api.base_handler import BaseHandler
 from core.approval_review_facts import load_approval_review_facts
-from integrations.openai_scenario_client import MissingApiKeyError, ModelTimeoutError
+from integrations.openai_review_transport import MissingApiKeyError, ModelTimeoutError
 from tests.unit.test_approval_review_facts import _ReadDb
 
 

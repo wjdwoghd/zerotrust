@@ -7,7 +7,7 @@ from tornado.testing import AsyncHTTPTestCase
 from api import other_approval_review_handler as handler
 from api.base_handler import BaseHandler
 from tests.unit.test_other_approval_review import ReadDb
-from integrations.openai_scenario_client import ModelTimeoutError
+from integrations.openai_review_transport import ModelTimeoutError
 
 
 class OtherReviewApiTest(AsyncHTTPTestCase):

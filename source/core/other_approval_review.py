@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from core.approval_review_facts import ReviewFactsError
-from integrations.openai_scenario_client import ModelOutputError
+from integrations.openai_review_transport import ModelOutputError
 
 
 TYPES = {"login", "assignment", "break_glass"}

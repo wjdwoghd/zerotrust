@@ -69,7 +69,6 @@ from api.other_approval_review_handler import (
     OtherApprovalFactsHandler, OtherApprovalAiHandler, EmergencyAuditCandidatesHandler,
     RepeatedUnassignedCandidatesHandler,
 )
-from api.policy_lab_handler import PolicyLabChallengeHandler
 
 
 STATIC_PATH = os.path.join(os.path.dirname(__file__), "static")
@@ -269,7 +268,6 @@ def make_app() -> tornado.web.Application:
         (r"/api/admin/reviews/(login|assignment|break_glass)/(\d+)/ai-review", OtherApprovalAiHandler),
         (r"/api/admin/audit-candidates/emergency-access", EmergencyAuditCandidatesHandler),
         (r"/api/admin/audit-candidates/repeated-unassigned", RepeatedUnassignedCandidatesHandler),
-        (r"/api/admin/policy-lab/challenges", PolicyLabChallengeHandler),
         (r"/api/admin/approvals/(\d+)/approve", ApproveHandler),
         (r"/api/admin/approvals/(\d+)/reject", RejectHandler),
         (r"/api/admin/case-assignment-requests/pending", CaseAssignmentPendingHandler),

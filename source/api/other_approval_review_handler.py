@@ -9,9 +9,9 @@ from core.other_approval_review import load_review_facts, build_model_input, rev
 from core.audit_events import AuditEvent, audit_log
 from database import get_db
 from integrations.openai_other_approval_client import generate_review
-from integrations.openai_scenario_client import (
+from integrations.openai_review_transport import (
     MissingApiKeyError, ModelRefusalError, ModelTimeoutError, ModelOutputError,
-    ScenarioGenerationError,
+    ReviewTransportError,
 )
 
 
@@ -41,7 +41,7 @@ class OtherApprovalAiHandler(BaseHandler):
             return
         import config
         target_id = int(target_id)
-        model = config.OPENAI_SCENARIO_MODEL
+        model = config.OPENAI_REVIEW_MODEL
         error_code = None
         result = None
         db = get_db()
@@ -61,7 +61,7 @@ class OtherApprovalAiHandler(BaseHandler):
             try:
                 raw = await asyncio.to_thread(generate_review, facts=payload,
                     api_key=config.OPENAI_API_KEY, model=model,
-                    timeout=float(config.OPENAI_SCENARIO_TIMEOUT_SEC))
+                    timeout=float(config.OPENAI_REVIEW_TIMEOUT_SEC))
                 result = review_response(facts, raw, aliases, model)
             except MissingApiKeyError:
                 error_code, status = "key_not_configured", 503
@@ -72,7 +72,7 @@ class OtherApprovalAiHandler(BaseHandler):
             except ModelOutputError as error:
                 error_code = "evidence_ref_invalid" if "evidence" in str(error) else "model_schema_invalid"
                 status = 502
-            except (ScenarioGenerationError, OSError):
+            except (ReviewTransportError, OSError):
                 error_code, status = "openai_error", 502
             except (ValueError, TypeError, KeyError):
                 error_code, status = "model_schema_invalid", 502
