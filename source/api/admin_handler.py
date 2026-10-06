@@ -1,5 +1,6 @@
 """관리자 API 핸들러"""
 import datetime
+import asyncio
 import json
 import re
 import time
@@ -9,6 +10,10 @@ from config import ADMIN_APPROVAL_TTL_SEC
 from core.audit_events import AuditEvent, audit_log
 from core.case_assignment_rules import assignment_compatibility
 from core.approval_review_facts import load_approval_review_facts, ReviewFactsError
+from core.approval_ai_review import build_model_input, review_response
+from integrations.openai_approval_review_client import generate_approval_review
+from integrations.openai_scenario_client import (MissingApiKeyError, ModelOutputError,
+    ModelRefusalError, ModelTimeoutError, ScenarioGenerationError)
 from security.password_handler import hash_password
 from security.mfa_service import generate_secret
 
@@ -77,6 +82,70 @@ class ApprovalReviewFactsHandler(BaseHandler):
             self.write_error_json(exc.code, exc.status, code=exc.code)
         finally:
             db.close()
+
+
+class ApprovalAiReviewHandler(BaseHandler):
+    """POST /api/admin/approvals/<id>/ai-review; transient advice only."""
+
+    async def post(self, approval_id):
+        reviewer = self.require_admin()
+        if not reviewer:
+            return
+        import config
+        aid = int(approval_id)
+        model = config.OPENAI_SCENARIO_MODEL
+        error_code = None
+        result = None
+        db = get_db()
+        try:
+            facts = load_approval_review_facts(db, aid, int(reviewer["user_id"]))
+            model_input, aliases = build_model_input(facts)
+        except ReviewFactsError as error:
+            error_code = error.code
+            status = error.status
+        except (ValueError, KeyError, TypeError):
+            error_code, status = "review_input_invalid", 409
+        except Exception:
+            error_code, status = "review_facts_unavailable", 503
+        finally:
+            db.close()
+        if not error_code:
+            try:
+                raw = await asyncio.to_thread(generate_approval_review,
+                    facts=model_input, api_key=config.OPENAI_API_KEY, model=model,
+                    timeout=float(config.OPENAI_SCENARIO_TIMEOUT_SEC))
+                result = review_response(facts, raw, aliases,
+                    model_input["past_decisions"]["candidates"], model)
+            except MissingApiKeyError:
+                error_code, status = "key_not_configured", 503
+            except ModelRefusalError:
+                error_code, status = "model_refusal", 502
+            except ModelTimeoutError:
+                error_code, status = "model_timeout", 504
+            except ModelOutputError as error:
+                error_code = "evidence_ref_invalid" if "evidence" in str(error) or "reference" in str(error) else "model_schema_invalid"
+                status = 502
+            except ScenarioGenerationError:
+                error_code, status = "openai_error", 502
+            except OSError:
+                error_code, status = "openai_error", 502
+            except (ValueError, TypeError, KeyError):
+                error_code, status = "model_schema_invalid", 502
+        # The facts transaction is read-only. Audit uses a separate connection and
+        # contains no model input, output, user text, or resource information.
+        audit_db = get_db()
+        try:
+            audit_log(audit_db, AuditEvent.APPROVAL_AI_REVIEW,
+                user_id=reviewer["user_id"], request_id=self.request_id,
+                details={"approval_id": aid, "reviewer_id": reviewer["user_id"],
+                         "status": "failed" if error_code else "succeeded",
+                         "error_code": error_code, "model": model}, severity=2)
+        finally:
+            audit_db.close()
+        if error_code:
+            self.write_error_json(error_code, status, code=error_code)
+        else:
+            self.write_json(result)
 
 
 class ApproveHandler(BaseHandler):

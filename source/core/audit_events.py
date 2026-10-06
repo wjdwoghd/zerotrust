@@ -63,6 +63,7 @@ class AuditEvent(str, enum.Enum):
     # 관리자 콘솔에서 신규 계정 프로비저닝 (§20, role='user' 고정)
     USER_CREATED        = "USER_CREATED"
     POLICY_LAB_CHALLENGE = "POLICY_LAB_CHALLENGE"
+    APPROVAL_AI_REVIEW = "APPROVAL_AI_REVIEW"
     MFA_SUCCESS       = "MFA_SUCCESS"
     MFA_FAILURE       = "MFA_FAILURE"
 
@@ -111,6 +112,7 @@ _SCHEMAS: Dict[AuditEvent, tuple] = {
     AuditEvent.ACCOUNT_ACTIVATED:       ("target_user_id", "admin_id"),
     AuditEvent.USER_CREATED:            ("target_user_id", "admin_id", "username", "role"),
     AuditEvent.POLICY_LAB_CHALLENGE:    ("goal", "count", "status", "error_code"),
+    AuditEvent.APPROVAL_AI_REVIEW:      ("approval_id", "reviewer_id", "status", "error_code", "model"),
     AuditEvent.MFA_SUCCESS:             ("username",),
     AuditEvent.MFA_FAILURE:             ("username", "reason"),
     AuditEvent.SECRET_ROTATED:          ("key_name",),

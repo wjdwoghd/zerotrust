@@ -3047,6 +3047,7 @@
         function AdminPage() {
             const auth = useContext(AuthContext);
             const [approvals, setApprovals] = useState([]);
+            const [approvalAi, setApprovalAi] = useState({});
             const [caseAssignmentRequests, setCaseAssignmentRequests] = useState([]);
             const [users, setUsers] = useState([]);
             const [bgPending, setBgPending] = useState([]);
@@ -3380,6 +3381,20 @@
                     }
                 } catch (err) {
                     addToast('요청 중 오류 발생', 'error');
+                }
+            };
+
+            const requestApprovalAi = async (approvalId) => {
+                setApprovalAi(prev => ({ ...prev, [approvalId]: { loading: true } }));
+                try {
+                    const response = await fetch(`/api/admin/approvals/${approvalId}/ai-review`, {
+                        method: 'POST', headers: { 'Authorization': `Bearer ${auth.token}` }
+                    });
+                    const data = await response.json();
+                    setApprovalAi(prev => ({ ...prev, [approvalId]: response.ok
+                        ? { result: data } : { error: data.code || `HTTP ${response.status}` } }));
+                } catch (error) {
+                    setApprovalAi(prev => ({ ...prev, [approvalId]: { error: 'network_error' } }));
                 }
             };
 
@@ -3798,6 +3813,27 @@
                                             <span className="text-sm text-slate-600">{approval.requested_at}</span>
                                         </div>
                                         <p className="text-sm text-slate-700 mb-4">{approval.reason}</p>
+                                        <div className="bg-blue-50 rounded p-3 text-sm mb-3">
+                                            <button onClick={() => requestApprovalAi(approval.id)}
+                                                disabled={approvalAi[approval.id]?.loading || approval.requester_id === auth.user?.id}
+                                                className="px-3 py-1 rounded bg-blue-700 text-white disabled:opacity-50">
+                                                {approvalAi[approval.id]?.loading ? 'AI 검토 중…' : 'AI 참고 의견 요청'}
+                                            </button>
+                                            {approval.requester_id === auth.user?.id && <p>본인 요청은 검토할 수 없습니다.</p>}
+                                            {approvalAi[approval.id]?.error && <p role="alert">AI 검토 실패: {approvalAi[approval.id].error}</p>}
+                                            {approvalAi[approval.id]?.result && <div className="space-y-2 mt-2">
+                                                <p className="font-semibold">AI 참고 의견이며 승인·반려 결정이 아닙니다.</p>
+                                                <p>모델 상태: {approvalAi[approval.id].result.model_status} · 생성 시각: {approvalAi[approval.id].result.generated_at}</p>
+                                                <section><h5 className="font-semibold">서버 사실</h5>
+                                                    <pre className="whitespace-pre-wrap break-all">{JSON.stringify(approvalAi[approval.id].result.policy_facts, null, 2)}</pre></section>
+                                                <section><h5 className="font-semibold">AI 참고 의견</h5>
+                                                    <pre className="whitespace-pre-wrap break-all">{JSON.stringify(approvalAi[approval.id].result.ai_review, null, 2)}</pre></section>
+                                                <section><h5 className="font-semibold">미확인·분석 한계</h5>
+                                                    <pre className="whitespace-pre-wrap break-all">{JSON.stringify(approvalAi[approval.id].result.uncertainties, null, 2)}</pre></section>
+                                                <section><h5 className="font-semibold">검증된 근거 ID</h5>
+                                                    <pre className="whitespace-pre-wrap break-all">{JSON.stringify(approvalAi[approval.id].result.evidence_ids, null, 2)}</pre></section>
+                                            </div>}
+                                        </div>
                                         <div className="bg-white/60 rounded p-3 text-xs text-slate-600 mb-3 leading-relaxed">
                                             <div className="font-semibold text-slate-700 mb-1">승인 옵션</div>
                                             <div>
