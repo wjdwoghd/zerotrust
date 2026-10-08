@@ -25,6 +25,7 @@ APP_PATHS = [
     "api",
     "apps/virtual_device.py",
     "core",
+    "integrations",
     "migrations",
     "scripts/__init__.py",
     "scripts/regenerate_launchers.py",
@@ -257,6 +258,31 @@ def verify_python_runtime(python_runtime: Path) -> None:
         raise SystemExit("bundled Python dependency verification failed")
 
 
+def verify_app_imports(python_runtime: Path) -> None:
+    """Import the packaged server in isolation, without DB or external API calls."""
+    log("verify packaged server imports")
+    code = (
+        "import sys\n"
+        "sys.path.insert(0, sys.argv[1])\n"
+        "import dotenv\n"
+        "dotenv.load_dotenv = lambda *args, **kwargs: False\n"
+        "import server\n"
+        "print('packaged server imports ok')\n"
+    )
+    env = os.environ.copy()
+    env["OPENAI_API_KEY"] = ""
+    env["DATABASE_URL"] = "postgresql://unused:unused@127.0.0.1:1/unused"
+    env["SECRET_KEY"] = "installer-import-check-only-" * 2
+    result = subprocess.run(
+        [str(python_runtime / "python.exe"), "-I", "-c", code, str(PAYLOAD.resolve())],
+        cwd=str(PAYLOAD), env=env, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=60,
+    )
+    if result.returncode != 0:
+        print(result.stdout)
+        raise SystemExit("packaged server import verification failed")
+
+
 def ensure_icons() -> None:
     icons = PACKAGING / "icons"
     if all((icons / name).exists() for name in ICON_FILES):
@@ -374,6 +400,7 @@ def main(argv: list[str]) -> int:
     copy_python(python, python_runtime)
     copy_runtime_dependencies(python_runtime)
     verify_python_runtime(python_runtime)
+    verify_app_imports(python_runtime)
     copy_postgres(postgres, PAYLOAD / "runtime" / "postgres")
     make_zip()
     build_installer()

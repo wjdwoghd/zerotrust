@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Fixed
+- [Windows 패키징] 승인 AI 경로가 사용하는 `integrations`를 설치 내용에 추가하고 번들 Python의 서버 import 검사를 빌드에 연결했다. 누락된 모듈로 설치 후 서버가 시작하지 못하는 문제를 방지한다. 설치 후 AI 설정과 최신 설치본 E2E 절차를 보완했으며 실제 EXE 생성·설치 검증은 별도 수행한다.
+
 ### Changed
 - [기존 v2 기능 정리] 합성 정책 도전자의 관리자 화면·API·AI 시나리오 생성을 제거했다. 승인 AI 검토의 공통 응답 처리·오류 검증은 승인 검토 경로로 옮기고, 합성 정책 계산기는 정책 회귀 비교용으로 보존했다. 승인 AI 검토 설정 이름은 `OPENAI_SCENARIO_MODEL`·`OPENAI_SCENARIO_TIMEOUT_SEC`에서 `OPENAI_REVIEW_MODEL`·`OPENAI_REVIEW_TIMEOUT_SEC`로 변경되어 기존 환경 변수는 갱신이 필요하다. 과거 실험 감사 이력과 접근·승인·Break-Glass 경로, 읽기 전용 효과 조회 및 DB 스키마는 유지한다. 관련 테스트는 작성했으나 3~6단계 최종 일괄 검증 전까지 실행하지 않았다.
 

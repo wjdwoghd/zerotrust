@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import os
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -89,6 +90,9 @@ def test_installer_payload_contains_runtime_scripts_only(tmp_path, monkeypatch):
 
     for relative in (
         "server.py",
+        "integrations/openai_review_transport.py",
+        "integrations/openai_approval_review_client.py",
+        "integrations/openai_other_approval_client.py",
         "apps/virtual_device.py",
         "scripts/run_migrations.py",
         "scripts/regenerate_launchers.py",
@@ -106,3 +110,18 @@ def test_installer_payload_contains_runtime_scripts_only(tmp_path, monkeypatch):
     ):
         assert not (payload / relative).exists()
     assert (payload / "apps" / "launchers").is_dir()
+
+
+@pytest.mark.parametrize("include_integrations", [True, False])
+def test_packaged_server_imports_detect_missing_integration(tmp_path, monkeypatch, include_integrations):
+    builder = _load_module("build_installer_import_test", "build_installer.py")
+    monkeypatch.setattr(builder, "PAYLOAD", tmp_path / "payload")
+    if not include_integrations:
+        monkeypatch.setattr(builder, "APP_PATHS", [p for p in builder.APP_PATHS if p != "integrations"])
+    builder.copy_app()
+    runtime = Path(sys.executable).parent
+    if include_integrations:
+        builder.verify_app_imports(runtime)
+    else:
+        with pytest.raises(SystemExit, match="packaged server import verification failed"):
+            builder.verify_app_imports(runtime)

@@ -12,3 +12,7 @@ ZeroTrust USB package
 4. source 폴더에는 설치 파일을 만들 때 사용한 프로젝트 코드와 패키징 파일이 들어 있습니다.
 
 설치 파일은 Python 런타임과 PostgreSQL 런타임을 포함한 self-contained 설치 파일입니다.
+웹 UI의 CDN과 AI 참고 검토에는 인터넷 연결이 필요합니다.
+설치기는 기존 설치 폴더와 데이터를 교체합니다. 보존할 데이터가 있는 PC에서는 실행하지 마세요.
+AI 설정은 source/packaging/windows/README.md의 '승인 AI 참고 검토 설정'을 따릅니다.
+키가 없어도 기존 접근 결정과 수동 승인은 사용할 수 있습니다.
