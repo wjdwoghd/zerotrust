@@ -196,10 +196,25 @@ class BaseHandler(tornado.web.RequestHandler):
                     if not path.endswith("/api/auth/reauth"):
                         self.set_header("WWW-Authenticate",
                                         'Bearer error="reauth_required"')
-                        self.write_error_json(
-                            "동시 접속이 감지되어 재인증이 필요합니다.",
-                            401, code="concurrent_session_detected"
-                        )
+                        lock = db.execute(
+                            "SELECT details FROM audit_logs WHERE user_id=? "
+                            "AND event_type='CONCURRENT_SESSION_LOCKED' "
+                            "AND details->'locked_session_ids' @> ?::jsonb "
+                            "AND created_at >= ? ORDER BY id DESC LIMIT 1",
+                            (user["user_id"], json.dumps([int(session_id)]),
+                             session_row["pending_reauth_at"]),
+                        ).fetchone()
+                        details = (lock["details"] if lock else {}) or {}
+                        if isinstance(details, str):
+                            details = json.loads(details)
+                        rule = details.get("rule")
+                        if rule == "IMPOSSIBLE_TRAVEL":
+                            code, message = "impossible_travel_detected", "불가능한 위치 이동이 감지되어 재인증이 필요합니다."
+                        elif details.get("reason") == "location_anomaly":
+                            code, message = "location_anomaly_detected", "허용되지 않은 위치 접근이 감지되어 재인증이 필요합니다."
+                        else:
+                            code, message = "concurrent_session_detected", "동시 접속이 감지되어 재인증이 필요합니다."
+                        self.write_error_json(message, 401, code=code)
                         return None
 
                 # 사용자 잠금/비활성 확인

@@ -79,6 +79,17 @@ function Replace-InstallDirectory([string]$InstallPath, [string]$StagePath) {
     }
 
     $root = Normalize-PathText $InstallPath
+    # Keep only locally configured optional AI settings across a reinstall.
+    # The application database and all other installed state are still replaced.
+    $aiSettings = @{}
+    $previousEnv = Join-Path $InstallPath '.env'
+    if (Test-Path -LiteralPath $previousEnv) {
+        foreach ($line in Get-Content -LiteralPath $previousEnv -Encoding UTF8) {
+            if ($line -match '^\s*(OPENAI_API_KEY|OPENAI_REVIEW_MODEL|OPENAI_REVIEW_TIMEOUT_SEC)\s*=\s*(\S.*)$') {
+                $aiSettings[$matches[1]] = $matches[2]
+            }
+        }
+    }
     Stop-ZeroTrustProcesses $root
 
     $parent = Split-Path -Parent $InstallPath
@@ -100,6 +111,16 @@ function Replace-InstallDirectory([string]$InstallPath, [string]$StagePath) {
     }
 
     Move-Item -LiteralPath $StagePath -Destination $InstallPath -ErrorAction Stop
+
+    if ($aiSettings.ContainsKey('OPENAI_API_KEY')) {
+        $lines = @('OPENAI_API_KEY', 'OPENAI_REVIEW_MODEL', 'OPENAI_REVIEW_TIMEOUT_SEC') |
+            Where-Object { $aiSettings.ContainsKey($_) } |
+            ForEach-Object { "$_=$($aiSettings[$_])" }
+        [System.IO.File]::WriteAllLines(
+            (Join-Path $InstallPath '.env'), $lines,
+            (New-Object System.Text.UTF8Encoding($false))
+        )
+    }
 
     Get-ChildItem -LiteralPath $parent -Directory -Filter "ZeroTrustDemo.old.*" -ErrorAction SilentlyContinue |
         ForEach-Object {

@@ -27,6 +27,12 @@ Created shortcuts:
 최초 실행 후 `ZeroTrust 제어`에서 서버를 종료하고
 `%LOCALAPPDATA%\ZeroTrustDemo\.env`에 다음 항목을 추가합니다.
 기존 SECRET_KEY·DATABASE_URL 등은 유지합니다.
+이미 소스 실행용 `source/.env`에 키가 있다면 서버를 종료한 뒤 다음 명령으로
+AI 설정 세 항목만 설치 환경에 복사할 수 있습니다. 키 값은 출력되지 않습니다.
+
+```powershell
+python source/packaging/windows/sync_ai_settings.py source/.env "$env:LOCALAPPDATA/ZeroTrustDemo/.env"
+```
 
 ```dotenv
 OPENAI_API_KEY=<별도로 발급받은 서버용 키>
@@ -38,6 +44,8 @@ OPENAI_REVIEW_TIMEOUT_SEC=20
 `OPENAI_SCENARIO_MODEL`·`OPENAI_SCENARIO_TIMEOUT_SEC`는 읽지 않습니다.
 키가 없으면 AI 참고 의견 요청만 `key_not_configured`로 실패하며, 수동 승인과
 기존 접근 결정은 사용할 수 있습니다. 키를 배포 파일·스크린샷·로그에 넣지 않습니다.
+같은 PC에 다시 설치할 때는 기존 설치 폴더의 AI 설정 세 항목만 새 설치 폴더로
+이어집니다. 신규 PC 설치에는 키가 포함되지 않으므로 별도 설정이 필요합니다.
 AI 호출에는 인터넷이 필요하며 현재 웹 UI도 CDN 연결을 사용합니다.
 실제 자료의 외부 전송 범위는 미확정이므로 검증은 합성 시연 데이터로 수행합니다.
 

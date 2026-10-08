@@ -484,7 +484,35 @@ def evaluate_access(user_id: int, resource_id: int, session_id: int = None,
     # 관리자 승인이 필요하지만, 이미 승인된 경우
     #  - download_allowed=true  → 전체 허용(level 1, 다운로드 가능)
     #  - download_allowed=false → 열람 전용(level 2, 기본값)
-    if pre_approved and admin_required:
+    approval_eligible = False
+    if pre_approved:
+        # 승인 보너스(-15)가 원래 L5였던 점수를 L4로 낮춰 차단을 우회하지 않게 한다.
+        unapproved_fitness = score_work_fitness(
+            is_assigned_case=is_assigned_case, same_department=same_department,
+            jurisdiction_match=same_department, pre_approved=False,
+            job_relevance=job_relevance,
+        )
+        unapproved_total = calculate_total_risk(
+            obj_result["score"], env_result["score"], beh_result["score"],
+            unapproved_fitness["score"],
+        )
+        unapproved_decision = determine_access_level(
+            unapproved_total["total_risk_score"], resource["sensitivity_grade"],
+            confidence=1.0,
+        )
+        approval_eligible = unapproved_decision["level"] < 5
+        if not approval_eligible:
+            # 승인 가산점 때문에 현재 총점이 내려가도 원래 L5 차단은 유지한다.
+            for field in ("level", "label", "label_en", "external_message"):
+                decision[field] = unapproved_decision[field]
+            decision["reason"] = "승인 가산점 적용 전 L5 차단 유지"
+            decision["override"] = {
+                "type": "APPROVAL_L5_BLOCK",
+                "reason": "승인 가산점 적용 전 L5 차단 유지",
+                "score_level": decision.get("score_level"),
+                "score_label": decision.get("score_label"),
+            }
+    if pre_approved and approval_eligible and decision["level"] < 5:
         if approved_download:
             decision["level"] = 1
             decision["label"] = "전체 허용 (사전 승인·다운로드 허용)"

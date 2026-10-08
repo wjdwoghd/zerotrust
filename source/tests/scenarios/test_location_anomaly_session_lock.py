@@ -9,9 +9,8 @@
     - CONCURRENT_SESSION_LOCKED 감사 이벤트 + LOCATION_ANOMALY_LOCKED 보조 이벤트
     - decision.level == 5, decision.rule in
       ("LOCATION_NOT_ALLOWED", "IMPOSSIBLE_TRAVEL")
-  → base_handler.require_auth() 가 후속 요청을 401 concurrent_session_detected
-    로 끊어, OTP 재인증 모달이 그대로 떠야 한다 (별도 검증은 base_handler 단의
-    기존 분기에 의존 — 코드 라인 192~203).
+  → base_handler.require_auth() 가 후속 요청을 위치 이상별 401 코드로
+    끊어, OTP 재인증 모달에 정확한 원인을 표시해야 한다.
 
 이 테스트는 DB 만 거치고 라이브 서버는 띄우지 않는다.
 """
@@ -20,6 +19,32 @@ from __future__ import annotations
 import datetime
 
 import pytest
+
+
+@pytest.mark.parametrize("previous,attempted,expected", [
+    ("지청-부산", "본청", "impossible_travel_detected"),
+    (None, "해외", "location_anomaly_detected"),
+])
+def test_location_lock_response_names_actual_cause(http, login_as, db,
+                                                   previous, attempted, expected):
+    """위치 이상 잠금은 동시 로그인으로 오인시키지 않고 OTP 경로를 유지한다."""
+    token, status, _ = login_as("detective_kim")
+    assert status == 200
+    user_id = db.execute("SELECT id FROM users WHERE username=?",
+                         ("detective_kim",)).fetchone()["id"]
+    sid = db.execute("SELECT id FROM sessions WHERE user_id=? AND is_active=TRUE "
+                     "ORDER BY id DESC LIMIT 1", (user_id,)).fetchone()["id"]
+    db.execute("UPDATE sessions SET last_location=?, last_location_time=NOW() "
+               "WHERE id=?", (previous, sid))
+    db.commit()
+    rid = db.execute("SELECT id FROM resources WHERE case_number=?",
+                     ("2026-ADM-0099",)).fetchone()["id"]
+    code, blocked = http("GET", f"/api/resources/cases/{rid}", token=token,
+                         device="registered-001", location=attempted)
+    assert code == 200 and blocked["status"] == "DENY", blocked
+    code, locked = http("GET", "/api/auth/me", token=token)
+    assert code == 401 and locked["code"] == expected, locked
+    assert "재인증" in locked["error"]
 
 
 def _make_session(db, user_id, *, location="본청", device_id="registered-001"):

@@ -2,13 +2,14 @@
 외부 응답 포매터 (L5-3)
 
 내부 decision/scoring/policy_check 객체를 외부 응답 바디로 변환한다.
-일반 사건 API는 3단계 상태, 안내 문구, 허용 행동만 공개한다.
+일반 사건 API는 3단계 상태, 안내 문구, 허용 행동과 현재 총 위험점수만 공개한다.
 상세의 본문·메타데이터는 서버의 열람 허용 후에만 포함한다.
-내부 점수·판단 근거는 감사 경로에 남긴다.
+4축 점수·판단 근거는 감사 경로에 남긴다.
 """
 from __future__ import annotations
 
 from typing import Any, Dict
+import math
 
 from core.decision_engine import get_action_permissions
 
@@ -60,6 +61,11 @@ def format_evaluation_response(eval_result: Dict[str, Any], *,
                             or "",
         "actions": actions,
     }
+    score = decision.get("risk_score")
+    response["risk_score"] = (
+        round(float(score), 1) if type(score) in (int, float)
+        and math.isfinite(score) and 0 <= score <= 100 else None
+    )
     if include_resource:
         public_resource = {key: resource[key] for key in ("id", "title")
                            if key in resource}

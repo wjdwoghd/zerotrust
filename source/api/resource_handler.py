@@ -721,9 +721,20 @@ class CaseApprovalRequestHandler(BaseHandler):
                     "리소스를 찾을 수 없습니다.", 404, code="resource_not_found"
                 )
 
-            # requires_approval 플래그가 없고 sens<4 이면 승인 게이트 없음.
+            # 점수 기반 L4도 동일한 승인 경로를 사용한다. 요청 확인은 행동을 가산하지 않는다.
             needs_gate = bool(res["requires_approval"]) or int(
                 res["sensitivity_grade"] or 0) >= 4
+            if not needs_gate:
+                sim_hour = self.get_simulated_hour()
+                hour = sim_hour if sim_hour is not None else time.localtime().tm_hour
+                evaluation = evaluate_access(
+                    user_id=user["user_id"], resource_id=rid,
+                    session_id=user.get("session_id"), device_id=self.get_device_id(),
+                    location=self.get_location(), ip_address=self.get_ip_address(),
+                    action_type="view", hour=hour, is_night=hour >= 22 or hour < 6,
+                    record_access=False, mutate_state=False, include_resource_body=False,
+                )
+                needs_gate = evaluation.get("decision", {}).get("level") == 4
             if not needs_gate:
                 return self.write_error_json(
                     "이 자원은 관리자 승인이 필요한 자원이 아닙니다.",
@@ -788,10 +799,9 @@ class CaseApprovalRequestHandler(BaseHandler):
             except Exception:
                 pass
 
-        self.set_status(201)
         self.write_json({
             "approval_id": new_id,
             "status": "pending",
             "existing": False,
             "message": "승인 요청이 접수되었습니다. 관리자 검토를 기다려주세요.",
-        })
+        }, status=201)

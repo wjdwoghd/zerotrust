@@ -32,10 +32,10 @@ def test_case_status_downgrade_clears_body_and_upgrade_refreshes(tmp_path):
         var reauth = applyPublicCaseStatus(allowed, {
             request_id: 'two', status: 'VERIFY',
             actions: {can_view: false, reauthenticate: true},
-            external_message: '재인증 필요'
+            external_message: '재인증 필요', risk_score: 68.5
         });
         if (reauth.resource.content !== undefined || reauth.resource.case_number !== undefined ||
-            reauth.status !== 'VERIFY' || shouldRefreshCaseDetail(reauth) ||
+            reauth.status !== 'VERIFY' || reauth.risk_score !== 68.5 || shouldRefreshCaseDetail(reauth) ||
             getCaseUiActions(reauth).canView || !getCaseUiActions(reauth).reauthenticate) {
             throw Error('재인증 전 본문 제거 실패');
         }

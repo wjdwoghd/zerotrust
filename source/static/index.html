@@ -455,6 +455,7 @@
             // 초를 받아 sessionTimer 상태로 동기화하고, 별도 1초 interval 로
             // 클라이언트 측 카운트다운을 진행한다.
             const [concurrentReauthRequired, setConcurrentReauthRequired] = useState(false);
+            const [reauthCause, setReauthCause] = useState('concurrent_session_detected');
             const [sessionTimer, setSessionTimer] = useState(null);
             // sessionTimer 모양:
             //   { idleRemaining:int, idleTotal:int,
@@ -473,8 +474,9 @@
                     });
                     if (res.status === 401) {
                         const data = await res.json().catch(() => ({}));
-                        if (data.code === 'concurrent_session_detected') {
+                        if (['concurrent_session_detected', 'impossible_travel_detected', 'location_anomaly_detected'].includes(data.code)) {
                             // 토큰 자체는 유효 — 동시 접속 모달만 띄우면 됨.
+                            setReauthCause(data.code);
                             setConcurrentReauthRequired(true);
                         } else {
                             // #30: 토큰/세션이 서버에서 무효화된 경우(만료, 취소,
@@ -581,6 +583,7 @@
                     adminApproval,
                     cancelAdminApproval,
                     concurrentReauthRequired,
+                    reauthCause,
                     resolveConcurrentReauth,
                     sessionTimer,
                     extendPromptVisible,
@@ -791,6 +794,8 @@
             already_logged_in: '이미 로그인된 세션이 있음',
             new_login_blocked_existing_flagged: '신규 로그인 차단 — 기존 세션이 잠금 표시됨',
             concurrent_session_detected: '동시 접속 감지 — 재인증 필요',
+            impossible_travel_detected: '불가능한 위치 이동 감지 — 재인증 필요',
+            location_anomaly_detected: '허용되지 않은 위치 접근 — 재인증 필요',
             pending_reauth: '재인증 대기 상태',
 
             // 토큰·기기
@@ -2097,6 +2102,7 @@
                 status: update.status,
                 actions: update.actions,
                 external_message: update.external_message,
+                risk_score: update.risk_score,
                 resource: update.actions.can_view
                     ? resource
                     : { id: resource.id, title: resource.title },
@@ -2145,6 +2151,17 @@
             const [bgSubmitting, setBgSubmitting] = useState(false);
             const [bgError, setBgError] = useState(null);
             const [refreshCounter, setRefreshCounter] = useState(0);
+            const [riskHistory, setRiskHistory] = useState([]);
+
+            useEffect(() => { setRiskHistory([]); }, [caseId]);
+            useEffect(() => {
+                const score = caseDetail?.risk_score;
+                if (typeof score !== 'number' || !Number.isFinite(score)) return;
+                setRiskHistory(previous => {
+                    if (previous.length && previous[previous.length - 1].score === score) return previous;
+                    return [...previous.slice(-29), { score, at: new Date().toLocaleTimeString() }];
+                });
+            }, [caseDetail?.risk_score]);
 
             // L4 명시적 승인 요청 상태
             //  - approvalRequest: { approval_id, status, existing } | null
@@ -2490,6 +2507,22 @@
 
                     {/* Decision Banner */}
                     <DecisionBanner status={status} actions={actions} message={external_message} />
+
+                    {typeof caseDetail?.risk_score === 'number' && (
+                        <section className="glass-card p-5 rounded-lg" aria-label="위험 점수 추이">
+                            <div className="flex items-baseline justify-between mb-2">
+                                <h3 className="font-semibold text-slate-900">현재 위험 점수</h3>
+                                <span className="text-2xl font-bold text-slate-900">{caseDetail.risk_score.toFixed(1)} / 100</span>
+                            </div>
+                            <svg viewBox="0 0 300 110" className="w-full h-28" role="img" aria-label={`위험 점수 변화 ${riskHistory.map(item => item.score).join(', ')}`}>
+                                {[25, 50, 75].map(mark => <line key={mark} x1="0" x2="300" y1={100 - mark} y2={100 - mark} stroke="#cbd5e1" strokeDasharray="4 4" />)}
+                                <polyline fill="none" stroke="#dc2626" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
+                                    points={riskHistory.map((item, index) => `${riskHistory.length === 1 ? 150 : index * 300 / (riskHistory.length - 1)},${100 - item.score}`).join(' ')} />
+                                {riskHistory.map((item, index) => <circle key={`${item.at}-${index}`} cx={riskHistory.length === 1 ? 150 : index * 300 / (riskHistory.length - 1)} cy={100 - item.score} r="3" fill="#b91c1c"><title>{`${item.at}: ${item.score}점`}</title></circle>)}
+                            </svg>
+                            <p className="text-xs text-slate-600">이 화면에서 관측한 점수 변경만 표시합니다. 자동 갱신은 행동 점수를 올리지 않습니다.</p>
+                        </section>
+                    )}
 
                     {/* Break-Glass 배너 — 현재 이 자원이 BG 로 열려 있을 때 */}
                     {viaBreakGlass && (
@@ -6108,11 +6141,13 @@
                     <div className="glass-card rounded-lg p-6 max-w-md w-full mx-4 border border-red-300">
                         <div className="flex items-center gap-2 mb-3">
                             <span className="text-2xl">⚠️</span>
-                            <h3 className="text-xl font-bold text-red-700">동시 접속 감지</h3>
+                            <h3 className="text-xl font-bold text-red-700">{auth.reauthCause === 'impossible_travel_detected' ? '불가능한 위치 이동 감지' : auth.reauthCause === 'location_anomaly_detected' ? '허용되지 않은 위치 접근' : '동시 접속 감지'}</h3>
                         </div>
                         <div className="text-xs text-slate-700 mb-4 space-y-1">
-                            <p>• 이 계정으로 다른 기기/브라우저에서 로그인 시도가 감지되어 이 세션이 일시 잠겼습니다.</p>
-                            <p>• 두 번째 로그인 시도는 이미 서버에서 거부되었으며, 어떤 새 세션도 만들어지지 않았습니다.</p>
+                            {auth.reauthCause === 'concurrent_session_detected' ? <>
+                                <p>• 이 계정으로 다른 기기/브라우저에서 로그인 시도가 감지되어 이 세션이 일시 잠겼습니다.</p>
+                                <p>• 두 번째 로그인 시도는 이미 서버에서 거부되었으며, 어떤 새 세션도 만들어지지 않았습니다.</p>
+                            </> : <p>• 시뮬레이션 위치 변경으로 세션이 일시 잠겼습니다. 실제 위치 검증 결과가 아닙니다.</p>}
                             <p>• 본인이 맞다면 토큰 기기의 OTP 6자리를 입력해 이 세션의 잠금을 해제하세요.</p>
                             <p>• 5분 이내 재인증하지 않으면 이 세션은 자동 만료됩니다.</p>
                         </div>

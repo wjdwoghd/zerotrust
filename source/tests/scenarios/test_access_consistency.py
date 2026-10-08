@@ -7,8 +7,9 @@ from security.mfa_service import generate_secret, generate_totp
 
 
 def _assert_consistent(payload: dict) -> None:
-    assert set(payload) in ({"request_id", "status", "external_message", "actions"},
-                            {"request_id", "status", "external_message", "actions", "resource"})
+    assert set(payload) in ({"request_id", "status", "external_message", "actions", "risk_score"},
+                            {"request_id", "status", "external_message", "actions", "resource", "risk_score"})
+    assert payload["risk_score"] is None or 0 <= payload["risk_score"] <= 100
     status = payload["status"]
     actions = payload["actions"]
     assert set(actions) == {

@@ -40,7 +40,8 @@ def test_detail_fields_follow_view_permission(level, status, required_action):
     """허용 전에는 본문·등급이 없고 허용 후에도 필요한 필드만 남는다."""
     result = format_evaluation_response(_evaluation(level), include_resource=True)
 
-    assert set(result) == {"request_id", "status", "external_message", "actions", "resource"}
+    assert set(result) == {"request_id", "status", "external_message", "actions", "resource", "risk_score"}
+    assert result["risk_score"] == 72.5
     assert result["status"] == status
     assert result["external_message"] == "접근 안내"
     assert {key: result["actions"][key] for key in get_action_permissions(level)} == (
@@ -59,10 +60,11 @@ def test_detail_fields_follow_view_permission(level, status, required_action):
         assert result["resource"] == {"id": 7, "title": "사건 제목"}
 
 
-def test_status_and_download_evaluation_never_return_resource_or_internals():
-    """폴링과 다운로드 평가는 본문·점수·판단 근거를 싣지 않는다."""
+def test_status_and_download_evaluation_only_add_public_total_score():
+    """폴링은 총점 한 값만 공개하고 본문·축별 점수·판단 근거를 싣지 않는다."""
     result = format_evaluation_response(_evaluation(4))
-    assert set(result) == {"request_id", "status", "external_message", "actions"}
+    assert set(result) == {"request_id", "status", "external_message", "actions", "risk_score"}
+    assert result["risk_score"] == 72.5
     assert "비공개 본문" not in str(result)
     assert "INTERNAL_RULE" not in str(result)
 
@@ -117,7 +119,7 @@ def test_detail_handler_applies_same_public_contract_to_roles(monkeypatch, role)
     assert request.status == 200
     assert request.payload["resource"] == {"id": 7, "title": "사건 제목"}
     assert set(request.payload) == {
-        "request_id", "status", "external_message", "actions", "resource",
+        "request_id", "status", "external_message", "actions", "resource", "risk_score",
     }
 
 
@@ -153,12 +155,12 @@ def test_status_handler_keeps_audit_input_internal(monkeypatch):
 
     assert audit_inputs == [original]
     assert set(request.payload) == {
-        "request_id", "status", "external_message", "actions",
+        "request_id", "status", "external_message", "actions", "risk_score",
     }
 
 
 def test_download_handlers_do_not_echo_internal_decision(monkeypatch):
-    """평가 POST와 파일 거부 403 모두 내부 점수를 숨긴다."""
+    """평가 POST와 파일 거부 403 모두 총점 외 내부 판단을 숨긴다."""
     original = _evaluation(5)
     original["resource"]["can_download"] = False
     monkeypatch.setattr(resource_handler, "evaluate_access", lambda **kwargs: original)
@@ -166,14 +168,14 @@ def test_download_handlers_do_not_echo_internal_decision(monkeypatch):
     request = _Request()
     resource_handler.CaseDownloadHandler.post(request, "7")
     assert set(request.payload) == {
-        "request_id", "status", "external_message", "actions",
+        "request_id", "status", "external_message", "actions", "risk_score",
     }
 
     request = _Request()
     resource_handler.CaseFileHandler.get(request, "7")
     assert request.status == 403
     assert set(request.payload) == {
-        "error", "code", "request_id", "status", "external_message", "actions",
+        "error", "code", "request_id", "status", "external_message", "actions", "risk_score",
     }
     assert "비공개 본문" not in str(request.payload)
 
