@@ -1,4 +1,4 @@
-"""Phase 4 contracts. Intentionally left for final phase 6 batch validation."""
+"""Phase 4 contracts for minimal facts, review authorization and AI output validation."""
 from datetime import datetime, timezone
 
 import pytest
@@ -25,10 +25,11 @@ class ReadDb:
                           "status": self.status or "pending", "requested_at": NOW,
                           "expires_at": None}]
         elif "FROM case_assignment_requests" in sql:
+            assignment_status = self.status or "otp_verified"
             self.rows = [{"id": 10, "requester_id": self.owner, "resource_id": 9,
-                          "reviewer_role": self.role, "status": self.status or "otp_verified",
+                          "reviewer_role": self.role, "status": assignment_status,
                           "requested_at": NOW, "otp_required_at": NOW,
-                          "otp_verified_at": NOW}]
+                          "otp_verified_at": NOW if assignment_status == "otp_verified" else None}]
         elif "FROM break_glass_activations" in sql:
             self.rows = [{"id": 10, "activator_id": self.owner,
                           "status": self.status or "released", "scope": "broad",
