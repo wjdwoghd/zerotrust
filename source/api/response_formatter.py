@@ -2,9 +2,9 @@
 외부 응답 포매터 (L5-3)
 
 내부 decision/scoring/policy_check 객체를 외부 응답 바디로 변환한다.
-일반 사건 API는 3단계 상태, 안내 문구, 허용 행동과 현재 총 위험점수만 공개한다.
+일반 사건 API는 3단계 상태, 안내 문구, 허용 행동과 현재 총 위험점수를 공개한다.
 상세의 본문·메타데이터는 서버의 열람 허용 후에만 포함한다.
-4축 점수·판단 근거는 감사 경로에 남긴다.
+상세·상태 응답은 해당 자료의 4축 점수 숫자만 추가하며 판단 근거는 감사 경로에 남긴다.
 """
 from __future__ import annotations
 
@@ -29,7 +29,8 @@ def external_status(level: int) -> str:
 
 
 def format_evaluation_response(eval_result: Dict[str, Any], *,
-                               include_resource: bool = False) -> Dict[str, Any]:
+                               include_resource: bool = False,
+                               include_risk_axes: bool = False) -> Dict[str, Any]:
     """접근 평가 결과에서 사용자에게 허용된 상태와 문서 필드만 반환한다."""
     decision = eval_result.get("decision", {}) or {}
     try:
@@ -66,6 +67,20 @@ def format_evaluation_response(eval_result: Dict[str, Any], *,
         round(float(score), 1) if type(score) in (int, float)
         and math.isfinite(score) and 0 <= score <= 100 else None
     )
+    if include_risk_axes:
+        scoring = eval_result.get("scoring") or {}
+        axes = {}
+        for public_key, internal_key in (
+            ("object_sensitivity", "object_sensitivity"),
+            ("environment_risk", "environment_risk"),
+            ("behavior_risk", "behavior_risk"),
+            ("work_fitness", "work_fitness"),
+        ):
+            value = (scoring.get(internal_key) or {}).get("score")
+            if type(value) in (int, float) and math.isfinite(value):
+                axes[public_key] = round(float(value), 1)
+        if len(axes) == 4:
+            response["risk_axes"] = axes
     if include_resource:
         public_resource = {key: resource[key] for key in ("id", "title")
                            if key in resource}

@@ -16,7 +16,12 @@ def _evaluation(level):
             "external_message": "접근 안내",
             "break_glass": None,
         },
-        "scoring": {"environment_risk": {"score": 33}},
+        "scoring": {
+            "object_sensitivity": {"score": 35},
+            "environment_risk": {"score": 33},
+            "behavior_risk": {"score": 15},
+            "work_fitness": {"score": -10},
+        },
         "policy_check": {"rule": "INTERNAL_RULE"},
         "anomaly_check": {"anomaly_types": ["INTERNAL"]},
         "resource": {
@@ -108,9 +113,9 @@ class _Request:
         self.status = status
 
 
-@pytest.mark.parametrize("role", ["user", "admin", "deputy_admin"])
+@pytest.mark.parametrize("role", ["user", "admin", "superadmin", "deputy_admin"])
 def test_detail_handler_applies_same_public_contract_to_roles(monkeypatch, role):
-    """관리자도 일반 사건 API에서 내부 근거를 받지 않는다."""
+    """모든 계정이 현재 자료의 4축 숫자를 받고 내부 근거와 제한된 본문은 받지 않는다."""
     monkeypatch.setattr(resource_handler, "evaluate_access", lambda **kwargs: _evaluation(4))
     request = _Request(role)
 
@@ -118,9 +123,16 @@ def test_detail_handler_applies_same_public_contract_to_roles(monkeypatch, role)
 
     assert request.status == 200
     assert request.payload["resource"] == {"id": 7, "title": "사건 제목"}
-    assert set(request.payload) == {
+    expected = {
         "request_id", "status", "external_message", "actions", "resource", "risk_score",
     }
+    expected.add("risk_axes")
+    assert request.payload["risk_axes"] == {
+        "object_sensitivity": 35.0, "environment_risk": 33.0,
+        "behavior_risk": 15.0, "work_fitness": -10.0,
+    }
+    assert set(request.payload) == expected
+    assert "INTERNAL_RULE" not in str(request.payload)
 
 
 @pytest.mark.parametrize("before,after", [(3, 1), (4, 2)])
@@ -141,7 +153,7 @@ def test_detail_handler_before_and_after_verification(monkeypatch, before, after
 
 
 def test_status_handler_keeps_audit_input_internal(monkeypatch):
-    """감사에는 원본 평가가 남고 사용자 상태 응답에는 공개 필드만 남는다."""
+    """감사에는 원본 평가가 남고 상태 응답에는 총점·4축 숫자만 남는다."""
     original = _evaluation(3)
     audit_inputs = []
     monkeypatch.setattr(resource_handler, "evaluate_access", lambda **kwargs: original)
@@ -155,8 +167,21 @@ def test_status_handler_keeps_audit_input_internal(monkeypatch):
 
     assert audit_inputs == [original]
     assert set(request.payload) == {
-        "request_id", "status", "external_message", "actions", "risk_score",
+        "request_id", "status", "external_message", "actions", "risk_score", "risk_axes",
     }
+
+
+@pytest.mark.parametrize("role", ["user", "admin"])
+def test_status_includes_axes_without_resource_or_reasons(monkeypatch, role):
+    monkeypatch.setattr(resource_handler, "evaluate_access", lambda **kwargs: _evaluation(3))
+    monkeypatch.setattr(resource_handler, "_log_score_change_if_needed", lambda **kwargs: None)
+    request = _Request(role)
+
+    resource_handler.CaseAccessStatusHandler.get(request, "7")
+
+    assert request.payload["risk_axes"]["behavior_risk"] == 15.0
+    assert "resource" not in request.payload
+    assert "INTERNAL_RULE" not in str(request.payload)
 
 
 def test_download_handlers_do_not_echo_internal_decision(monkeypatch):

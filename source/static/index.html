@@ -2103,6 +2103,7 @@
                 actions: update.actions,
                 external_message: update.external_message,
                 risk_score: update.risk_score,
+                risk_axes: update.risk_axes,
                 resource: update.actions.can_view
                     ? resource
                     : { id: resource.id, title: resource.title },
@@ -2514,6 +2515,26 @@
                                 <h3 className="font-semibold text-slate-900">현재 위험 점수</h3>
                                 <span className="text-2xl font-bold text-slate-900">{caseDetail.risk_score.toFixed(1)} / 100</span>
                             </div>
+                            {caseDetail.risk_axes && (
+                                <div className="space-y-3 mb-5" aria-label="현재 문서의 4축 위험 점수 그래프">
+                                    {[
+                                        ['object_sensitivity', '객체 민감도', 'bg-red-500'],
+                                        ['environment_risk', '환경 위험도', 'bg-amber-500'],
+                                        ['behavior_risk', '행동 위험도', 'bg-orange-500'],
+                                        ['work_fitness', '업무 적합도 (위험 감소)', 'bg-emerald-500'],
+                                    ].map(([key, label, color]) => {
+                                        const value = caseDetail.risk_axes[key];
+                                        return <div key={key} className="grid grid-cols-[11rem_1fr_4rem] gap-3 items-center text-sm">
+                                            <span className="text-slate-700">{label}</span>
+                                            <div className="h-5 bg-slate-100 rounded overflow-hidden" role="meter" aria-label={label} aria-valuenow={Math.abs(value)} aria-valuemin="0" aria-valuemax="100">
+                                                <div className={`h-full ${color}`} style={{ width: `${Math.min(100, Math.abs(value))}%` }}></div>
+                                            </div>
+                                            <span className="font-mono text-right text-slate-800">{value.toFixed(1)}</span>
+                                        </div>;
+                                    })}
+                                    <p className="text-xs text-slate-600">총점 = 객체 + 환경 + 행동 − |업무 적합도| (0~100 범위 적용)</p>
+                                </div>
+                            )}
                             <svg viewBox="0 0 300 110" className="w-full h-28" role="img" aria-label={`위험 점수 변화 ${riskHistory.map(item => item.score).join(', ')}`}>
                                 {[25, 50, 75].map(mark => <line key={mark} x1="0" x2="300" y1={100 - mark} y2={100 - mark} stroke="#cbd5e1" strokeDasharray="4 4" />)}
                                 <polyline fill="none" stroke="#dc2626" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"

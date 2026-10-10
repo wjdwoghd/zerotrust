@@ -109,7 +109,10 @@ class CaseDetailHandler(BaseHandler):
             hour=hour,
         )
 
-        self.write_json(format_evaluation_response(result, include_resource=True))
+        self.write_json(format_evaluation_response(
+            result, include_resource=True,
+            include_risk_axes=True,
+        ))
 
 
 class CaseAccessStatusHandler(BaseHandler):
@@ -155,7 +158,9 @@ class CaseAccessStatusHandler(BaseHandler):
             result=result,
             request_id=getattr(self, "request_id", None),
         )
-        self.write_json(format_evaluation_response(result))
+        self.write_json(format_evaluation_response(
+            result, include_risk_axes=True,
+        ))
 
 
 class CaseRestrictedClickHandler(BaseHandler):
