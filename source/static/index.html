@@ -713,6 +713,16 @@
             score_level: '점수 기반 단계',
             override: '예외 적용',
             axes: '4축 점수',
+            object: '객체 민감도',
+            environment: '환경 위험도',
+            behavior: '행동 위험도',
+            fitness: '업무 적합도 (위험 감소)',
+            raw_risk_score: '산정된 위험점수',
+            action_permissions: '허용된 문서 동작',
+            can_view: '열람',
+            can_download: '다운로드',
+            can_copy: '복사',
+            can_print: '인쇄',
             policy_rule: '정책 규칙',
             policy_reason: '정책 사유',
             decision_reason: '결정 사유',
@@ -740,6 +750,9 @@
 
             // 이상행동
             anomaly_types: '이상 유형',
+            click_index: '비담당 사건 클릭 순서',
+            penalty_clicks: '점수 가산 대상 클릭 수',
+            behavior_penalty: '행동 위험 가산점',
             anomaly_detected: '이상 탐지',
             travel_status: '이동 분석 상태',
 
@@ -790,6 +803,15 @@
         // 영문 reason 코드 → 사용자 친화 한국어. 코드값은 audit 추적용으로
         // 백엔드에 보존되되, UI 표시만 한국어로 변환.
         const REASON_LABELS = {
+            HIGH_FREQUENCY: '최근 5분간 접근이 잦음 (5회 이상)',
+            HIGH_FREQUENCY_CRITICAL: '최근 5분간 접근이 매우 잦음 (10회 이상)',
+            BULK_QUERY: '현재 세션에서 다수 자료 조회',
+            DOWNLOAD_ATTEMPT: '다운로드 시도',
+            COPY_ATTEMPT: '복사 시도',
+            DEVICE_MISMATCH: '로그인 때와 다른 기기에서 접근',
+            CONCURRENT_SESSION: '동시 접속 감지',
+            IMPOSSIBLE_TRAVEL: '짧은 시간에 먼 위치로 이동한 것으로 감지',
+            LOCATION_NOT_ALLOWED: '허용되지 않은 위치에서 접근',
             // 동시 접속 / 세션
             already_logged_in: '이미 로그인된 세션이 있음',
             new_login_blocked_existing_flagged: '신규 로그인 차단 — 기존 세션이 잠금 표시됨',
@@ -847,6 +869,26 @@
             not_eligible: '대상 자격 없음',
         };
 
+        const AUDIT_EVENT_LABELS = {
+            ACCESS_DECISION: '자료 접근 판단',
+            ACCESS_SCORE_CHANGED: '위험점수 변경',
+            UNASSIGNED_CASE_CLICK: '비담당 사건 접근',
+            IMMEDIATE_BLOCK: '즉시 차단',
+            FORCE_REAUTH: '재인증 요구',
+            ADMIN_APPROVAL_REQUESTED: '관리자 승인 요청',
+            ADMIN_APPROVAL_GRANTED: '관리자 승인',
+            ANOMALY_DETECTED: '이상 행동 감지',
+            LOGIN_SUCCESS: '로그인 성공',
+            LOGIN_FAILURE: '로그인 실패',
+            MFA_SUCCESS: '추가 인증 성공',
+            MFA_FAILURE: '추가 인증 실패',
+            CONCURRENT_SESSION_LOCKED: '동시 접속으로 세션 잠금',
+            CONCURRENT_SESSION_RESOLVED: '동시 접속 문제 해결',
+            BREAK_GLASS_ACTIVATED: '긴급 접근 시작',
+            BREAK_GLASS_USED: '긴급 접근 사용',
+            BREAK_GLASS_REVIEWED_UNJUSTIFIED: '긴급 접근 부당 판정',
+        };
+
         // 영문 reason 코드 → 한국어 매핑. 매핑 없으면 코드 그대로 표시 (fallback).
         const friendlyReason = (code) => {
             if (typeof code !== 'string') return code;
@@ -857,17 +899,23 @@
         const formatDetailValue = (key, value) => {
             if (value === null || value === undefined || value === '') return '-';
             if (typeof value === 'boolean') return value ? '예' : '아니오';
-            // reason / code 키의 영문 코드값은 한국어로 친화 표시
-            if ((key === 'reason' || key === 'code') && typeof value === 'string') {
+            // 감사 코드값은 원본을 바꾸지 않고 화면에서만 설명으로 변환한다.
+            if (typeof value === 'string' && REASON_LABELS[value]) {
                 return friendlyReason(value);
             }
             if (Array.isArray(value)) {
                 if (value.length === 0) return '없음';
-                return value.map(v => (typeof v === 'object' ? JSON.stringify(v) : String(v))).join(', ');
+                return <ul className="space-y-1">{value.map((item, index) =>
+                    <li key={index}>• {formatDetailValue(key, item)}</li>
+                )}</ul>;
             }
             if (typeof value === 'object') {
-                // 중첩 객체는 JSON 으로 (드물게 발생)
-                return JSON.stringify(value);
+                return <dl className="space-y-1">{Object.entries(value).map(([nestedKey, nestedValue]) =>
+                    <div key={nestedKey} className="flex flex-wrap gap-x-2 border-b border-slate-100 last:border-b-0">
+                        <dt className="font-medium text-slate-600">{detailKeyLabel(nestedKey)}:</dt>
+                        <dd>{formatDetailValue(nestedKey, nestedValue)}</dd>
+                    </div>
+                )}</dl>;
             }
             // _seconds 로 끝나는 정수는 분/시간 환산 보조 표기
             if (typeof value === 'number' && /_seconds?$/.test(key)) {
@@ -889,7 +937,7 @@
             return String(value);
         };
 
-        const detailKeyLabel = (k) => DETAIL_KEY_LABELS[k] || k;
+        const detailKeyLabel = (k) => DETAIL_KEY_LABELS[k] || k.replaceAll('_', ' ');
 
         // ============ MULTI-SELECT DROPDOWN ============
         // 감사 로그 필터 — 라벨 버튼 클릭 시 검색창 + 체크박스 리스트 패널이 열린다.
@@ -5273,10 +5321,6 @@
                                         const oneLine = isObj
                                             ? JSON.stringify(log.details)
                                             : (log.details || '-');
-                                        const pretty = isObj
-                                            ? JSON.stringify(log.details, null, 2)
-                                            : (log.details || '-');
-                                        const tooLong = oneLine.length > 60;
                                         const [date, time] = splitTimestamp(log.created_at);
                                         return (
                                             <tr
@@ -5303,7 +5347,7 @@
                                                             ? 'bg-police-100 text-police-800'
                                                             : 'bg-white text-slate-800 border border-slate-200'
                                                     }`}>
-                                                        {log.event_type}
+                                                        {AUDIT_EVENT_LABELS[log.event_type] || log.event_type?.replaceAll('_', ' ')}
                                                     </span>
                                                 </td>
                                                 <td className="py-3 px-4 align-top">
@@ -5819,6 +5863,10 @@
                             <div className="text-[10px] text-slate-500">
                                 위반 {Number.isFinite(violationCount) ? violationCount : 0}
                             </div>
+                            <details className="mt-1 max-w-56 text-[11px] leading-relaxed">
+                                <summary className="cursor-pointer underline">점수 설명</summary>
+                                <p className="mt-1">계정의 신뢰·위반 이력입니다. 사건별 위험점수와 별개이며, 낮은 신뢰점수나 많은 위반은 다음 로그인 때 관리자 승인을 요구할 수 있습니다.</p>
+                            </details>
                         </div>
                         <SessionTimerBadge />
                         <div className="text-right text-sm">
