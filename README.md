@@ -190,6 +190,7 @@ Virtual Token Device (Tkinter)
 관리자 승인 대기열의 각 자료 요청에서 **AI 참고 의견 요청**을 누르면 서버 사실, AI 의견, 미확인 항목과 근거 ID를 따로 볼 수 있습니다. 본인 요청에는 사용할 수 없으며 AI 오류가 나도 기존 승인·반려 버튼은 계속 사용할 수 있습니다. AI 의견은 승인·반려 결정이 아닙니다. 비DB 회귀는 통과했으며 격리 DB/API·실제 화면 검증은 대기 중입니다.
 
 승인 AI 참고 검토를 설정할 때는 서버의 `OPENAI_API_KEY`, `OPENAI_REVIEW_MODEL`, `OPENAI_REVIEW_TIMEOUT_SEC`를 사용합니다. 기존 `OPENAI_SCENARIO_MODEL`·`OPENAI_SCENARIO_TIMEOUT_SEC` 설정은 더 이상 읽지 않으므로 해당 환경을 사용하는 설치는 이름을 변경해야 합니다. 수동 승인과 v1 접근 결정에는 이 설정이 필요하지 않습니다.
+키가 설정되어 있어도 OpenAI API 프로젝트의 크레딧이 소진되거나 사용 한도에 도달하면 AI 참고 의견을 생성할 수 없습니다. 이때 화면은 원인을 구분해 안내하며, 크레딧 소진은 [OpenAI API 오류 안내](https://developers.openai.com/api/docs/guides/error-codes)에 따라 프로젝트의 결제·크레딧 상태를 복구해야 합니다. 재시도나 앱 재설치로 크레딧이 복원되지는 않습니다.
 
 소스 실행의 `source/.env`와 설치본의 `%LOCALAPPDATA%\ZeroTrustDemo\.env`는 별도 파일입니다. 소스에만 키가 있으면 설치본은 `key_not_configured`를 반환합니다. [설치본 AI 설정 안내](source/packaging/windows/README.md#승인-ai-참고-검토-설정)를 따라 설치 폴더에 설정하고 서버를 다시 시작합니다.
 

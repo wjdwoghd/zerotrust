@@ -13,7 +13,8 @@ from core.approval_review_facts import load_approval_review_facts, ReviewFactsEr
 from core.approval_ai_review import build_model_input, review_response
 from integrations.openai_approval_review_client import generate_approval_review
 from integrations.openai_review_transport import (MissingApiKeyError, ModelOutputError,
-    ModelRefusalError, ModelTimeoutError, ReviewTransportError)
+    ModelRefusalError, ModelTimeoutError, ReviewTransportError,
+    ReviewApiError, ReviewNetworkError)
 from security.password_handler import hash_password
 from security.mfa_service import generate_secret
 
@@ -125,10 +126,14 @@ class ApprovalAiReviewHandler(BaseHandler):
             except ModelOutputError as error:
                 error_code = "evidence_ref_invalid" if "evidence" in str(error) or "reference" in str(error) else "model_schema_invalid"
                 status = 502
+            except ReviewApiError as error:
+                error_code, status = error.public_error
+            except ReviewNetworkError:
+                error_code, status = "ai_network_error", 503
             except ReviewTransportError:
                 error_code, status = "openai_error", 502
             except OSError:
-                error_code, status = "openai_error", 502
+                error_code, status = "ai_network_error", 503
             except (ValueError, TypeError, KeyError):
                 error_code, status = "model_schema_invalid", 502
         # The facts transaction is read-only. Audit uses a separate connection and

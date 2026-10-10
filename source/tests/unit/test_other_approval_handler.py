@@ -7,7 +7,7 @@ from tornado.testing import AsyncHTTPTestCase
 from api import other_approval_review_handler as handler
 from api.base_handler import BaseHandler
 from tests.unit.test_other_approval_review import ReadDb
-from integrations.openai_review_transport import ModelTimeoutError
+from integrations.openai_review_transport import ModelTimeoutError, ReviewApiError
 
 
 class OtherReviewApiTest(AsyncHTTPTestCase):
@@ -35,6 +35,8 @@ class OtherReviewApiTest(AsyncHTTPTestCase):
 
         def generate(**kwargs):
             self.calls += 1
+            if isinstance(self.fail, Exception):
+                raise self.fail
             if self.fail:
                 raise ModelTimeoutError("do not log provider content")
             return {"review_opinion": "check_further", "items": [],
@@ -80,6 +82,14 @@ class OtherReviewApiTest(AsyncHTTPTestCase):
         assert json.loads(response.body)["code"] == "model_timeout"
         assert self.request().code == 200
         assert self.audits[-1]["status"] == "failed"
+
+    def test_exhausted_credits_are_explicit_and_manual_facts_still_work(self):
+        self.fail = ReviewApiError(429, "credit_balance_exhausted")
+        response = self.request(ai=True)
+        assert response.code == 503
+        assert json.loads(response.body)["code"] == "ai_credits_exhausted"
+        assert self.audits[-1]["error_code"] == "ai_credits_exhausted"
+        assert self.request().code == 200
 
     def test_candidates_are_admin_only_and_keep_evidence_ids(self):
         class CandidateDb(ReadDb):

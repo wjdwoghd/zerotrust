@@ -11,7 +11,7 @@ from database import get_db
 from integrations.openai_other_approval_client import generate_review
 from integrations.openai_review_transport import (
     MissingApiKeyError, ModelRefusalError, ModelTimeoutError, ModelOutputError,
-    ReviewTransportError,
+    ReviewTransportError, ReviewApiError, ReviewNetworkError,
 )
 
 
@@ -72,7 +72,11 @@ class OtherApprovalAiHandler(BaseHandler):
             except ModelOutputError as error:
                 error_code = "evidence_ref_invalid" if "evidence" in str(error) else "model_schema_invalid"
                 status = 502
-            except (ReviewTransportError, OSError):
+            except ReviewApiError as error:
+                error_code, status = error.public_error
+            except (ReviewNetworkError, OSError):
+                error_code, status = "ai_network_error", 503
+            except ReviewTransportError:
                 error_code, status = "openai_error", 502
             except (ValueError, TypeError, KeyError):
                 error_code, status = "model_schema_invalid", 502

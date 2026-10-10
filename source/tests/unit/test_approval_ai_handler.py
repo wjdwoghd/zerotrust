@@ -7,7 +7,7 @@ from tornado.testing import AsyncHTTPTestCase
 from api import admin_handler as admin
 from api.base_handler import BaseHandler
 from core.approval_review_facts import load_approval_review_facts
-from integrations.openai_review_transport import MissingApiKeyError, ModelTimeoutError
+from integrations.openai_review_transport import MissingApiKeyError, ModelTimeoutError, ReviewApiError
 from tests.unit.test_approval_review_facts import _ReadDb
 
 
@@ -89,3 +89,11 @@ class ApprovalAiApiTest(AsyncHTTPTestCase):
             assert "provider response" not in json.dumps(data)
         self.failure = None
         assert self.request_review()[0] == 200
+
+    def test_exhausted_credits_are_explicit_without_provider_content(self):
+        self.failure = lambda _: ReviewApiError(429, "credit_balance_exhausted")
+        status, data = self.request_review()
+        assert status == 503
+        assert data["code"] == "ai_credits_exhausted"
+        assert self.audits[-1]["error_code"] == "ai_credits_exhausted"
+        assert "provider response" not in json.dumps(data)
