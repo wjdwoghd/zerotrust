@@ -64,6 +64,7 @@ from api.break_glass_handler import (
     AdminBreakGlassReviewHandler, AdminBreakGlassRevokeHandler,
 )
 from api.base_handler import BaseHandler
+from api.behavior_timeline_handler import BehaviorTimelineHandler
 from api.approval_effect_handler import ApprovalEffectHandler
 from api.other_approval_review_handler import (
     OtherApprovalFactsHandler, OtherApprovalAiHandler, EmergencyAuditCandidatesHandler,
@@ -294,6 +295,8 @@ def make_app() -> tornado.web.Application:
         (r"/api/auth/login-approval/status", AdminApprovalStatusHandler),
 
         # Audit API
+        (r"/api/admin/behavior-timeline/(\d+)", BehaviorTimelineHandler),
+        (r"/api/admin/behavior-timeline/(\d+)/evidence/([^/]+)", BehaviorTimelineHandler),
         (r"/api/audit/logs", AuditLogHandler),
         (r"/api/audit/access-logs", AccessLogHandler),
         (r"/api/audit/dashboard", DashboardStatsHandler),

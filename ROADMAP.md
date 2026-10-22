@@ -2,7 +2,8 @@
 
 ## 시스템 전반 AI 행동 분석 — 단계별 개발 계획 (2026-10-22)
 
-**상태: S0 코드 조사 완료. S1~S7의 신규 구현·실행 검증은 하지 않았다.**
+**상태: S0 코드 조사 완료. S1 완료(합성·D4 기반 DB/API·격리 PostgreSQL 검증,
+2026-10-22). S2~S7 미착수.**
 목표는 로그인·자료 접근·다운로드·승인·담당 등록·Break-Glass(BG)의 기록을
 연결해 기존 개별 요청 평가에서 놓칠 수 있는 업무 목적 이탈과 행동 흐름을
 관리자의 검토 후보로 제시하는 것이다. BG는 관찰 대상 중 하나다.
@@ -40,14 +41,15 @@
 | `source/integrations/openai_*review*`, `source/static/index.html` | 전송·오류 처리와 기존 한국어 검토 표시를 재사용할 후보. 실제 계약과 권한을 대조한 뒤 필요한 부분만 수정한다. |
 | `source/tests/unit/`, `source/tests/scenarios/`, `source/tests/conftest.py` | 기존 검토·이상행동·세션·응답 제한 회귀와 격리 DB 설정을 재사용한다. 테스트 fixture가 초기화를 수행함에 유의한다. |
 
-아래 신규 계약·API·저장 구조는 개발 요구사항이다. 현재 구현된 것으로 해석하지 않는다.
+아래 계약·API·저장 구조는 단계별 개발 요구사항이다. 구현·검증한 S1 범위는 실행
+기록으로 구분하며 이후 단계의 저장·탐지·자동 AI 분석이 연결된 것으로 해석하지 않는다.
 
 ### 단계와 상태
 
 | 단계 | 작업 | 선행 조건 | 상태 |
 | --- | --- | --- | --- |
 | S0 | 사건·데이터·정책 경계 조사 | 개발 지침 확인 | 완료(코드·스키마·테스트 내용 대조, 2026-10-22). 실행 DB 검증은 미수행 |
-| S1 | 공통 행동 시간선과 근거 조회 | S0 데이터 지도 | 미착수 |
+| S1 | 공통 행동 시간선과 근거 조회 | S0 데이터 지도 | 완료(D4 확정·읽기 전용 DB/API 연결·격리 PostgreSQL 검증, 2026-10-22) |
 | S2 | 1차 탐지 후보와 합성 시나리오 | S1 계약 | 미착수 |
 | S3 | 근거 기반 AI 설명과 서버 검증 | S2 후보 계약 | 미착수 |
 | S4 | 비동기 관찰·분석 작업 실행 | S2·S3, 활성화에 필요한 결정 | 미착수 |
@@ -71,13 +73,20 @@
 조사 결과와 근거는 [POLICY S0 데이터 지도](docs/POLICY.md#s0-조사-결과--사건데이터-지도-2026-10-22)에 기록했다.
 로그인·환경·접근·다운로드·승인·담당 등록·BG의 기록/조회 경로, 연결 키·시각,
 과거 상태·결측·시연 신호, C1/C2 입력 한계와 기존 역할별 권한을 대조했다.
-사용자 선택에 따라 S1~S3는 합성 데이터·모의 AI로 먼저 진행하며 D4는 기존
-권한 대조 후 별도 확정한다. D1~D6 전체를 확정하거나 실제 분석을 활성화하지 않았다.
+사용자 선택에 따라 S1~S3는 합성 데이터·모의 AI로 먼저 진행했다. 이후 S1 읽기의
+D4를 기존 권한 대조 후 확정했다. D1~D6 전체 확정·실제 자동 분석 활성화는 아니다.
 S0은 문서 조사이므로 코드·DB·정책 변경 및 실행 테스트가 없다. 문서 링크/구조와
 `git diff --check`로 검증하며, 실제 DB 행·적용 상태·권한·화면은 후속 검증 대상이다.
-다음 작업은 S1의 합성 입력 정규화·시간선·근거/결측·권한 주입 테스트다.
+S1의 합성 입력 정규화·시간선·근거/결측·권한 주입 테스트 결과는 아래에 기록한다.
 
 ### S1 — 공통 행동 시간선과 근거 조회
+
+재개 작업(2026-10-22): 기존 역할별 실제 조회·수동 처리·AI 사실 조회의 차이를
+대조한 뒤 사용자가 권장안 전체를 선택해 [D4 계약](docs/POLICY.md#d4-확정-계약-2026-10-22)을
+확정했다. 이번 목표는 기존 합성 구현을 보존하면서 실제 출처·인증된 읽기 API를
+연결하고 격리 PostgreSQL에서 동일 시간선·권한·원본 상태 불변을 검증하는 것이다.
+기간·페이지·커서와 자기 관련·부서/타부서 근거의 거절까지 완료 조건에 포함한다.
+화면(S5)·탐지(S2)·AI·worker·신규 저장/보존 정책으로 범위를 넓히지 않는다.
 
 - `core/`에 읽기 전용 정규화·조회 서비스를 두고 `api/`는 인증·범위 검증·응답을
   맡는다. 이름과 URL은 기존 명명에 맞춰 정하되 최종 계약을 POLICY에 기록한다.
@@ -91,6 +100,59 @@ S0은 문서 조사이므로 코드·DB·정책 변경 및 실행 테스트가 �
   페이지 사이 누락/중복, 타 사용자·권한 밖 근거 직접 조회 차단, 읽기 전후 상태 불변.
 - **완료 조건:** 격리 DB/API에서 동일 시간선이 재현되고 원본 감사·접근·점수·승인·
   세션이 바뀌지 않는다. 권한 결정 전에는 합성 서비스 테스트까지만 진행한다.
+
+합성 단계 실행 기록(2026-10-22): `core/behavior_timeline.py`에 합성 전용 읽기 서비스를
+추가했고 실제 계약은 [POLICY S1](docs/POLICY.md#s1-합성-시간선-서비스-구현-계약-2026-10-22)에 기록했다.
+`source`에서 `python scripts/check_code_conventions.py` 통과.
+기본 Python에는 pytest가 없어 기존 프로젝트 가상환경을 사용했다.
+`C:/zerotrust/source/.venv/Scripts/python.exe -m pytest --noconftest -q tests/unit/test_behavior_timeline.py`
+결과 **56 passed**. `--noconftest`는 기존 autouse DB 연결·마이그레이션 fixture를
+읽지 않고 합성 단위 검증만 수행하기 위한 옵션이다. 시간대/동일 시각/기간 경계,
+중복·결측·충돌·연결 불가, 페이지 연속성·커서 범위, 근거 직접 조회 거절,
+현재 상태와 과거 구분, 합성 입력·반환값의 읽기 불변을 검증했다.
+이 합성 단계에서는 DB·HTTP API·화면·전체 회귀를 실행하지 않았다.
+이후 DB/API 실행 기록은 아래에 구분한다.
+
+DB/API 실행 기록(2026-10-22): `core/behavior_timeline_db.py`,
+`api/behavior_timeline_handler.py`, `server.py`를 연결했다. 합성 전용 진입점은 유지하고
+공통 정규화기를 서버 projection에도 사용한다. 신규 DB 마이그레이션은 없다.
+기본 localhost 테스트 DB가 연결되지 않아 기존 검증용 PostgreSQL 18.6 바이너리로
+별도 클러스터(`C:/zerotrust/source/.venv/s1-validation-20261022`), loopback 포트 55439,
+폐기 가능한 `zerotrust_test`를 생성했다. 이 대상임을 확인하고 기존 001~023
+마이그레이션과 테스트 fixture의 초기화/시드를 적용했다. 기존 DB는 사용하지 않았다.
+
+`source`에서 `POSTGRES_TEST_URL=postgresql://zt_test@127.0.0.1:55439/zerotrust_test`,
+`TZ=Asia/Seoul`을 해당 검증 프로세스에 지정하고 아래 명령을 실행했다.
+
+```text
+C:/zerotrust/source/.venv/Scripts/python.exe -m pytest -q tests/scenarios/test_behavior_timeline.py tests/unit/test_behavior_timeline.py tests/unit/test_approval_review_facts.py tests/unit/test_other_approval_review.py tests/unit/test_other_approval_handler.py tests/scenarios/test_approval_review_facts.py tests/scenarios/test_score_approval_flow.py tests/scenarios/test_session_lifecycle.py tests/scenarios/test_location_anomaly_session_lock.py --tb=short --show-capture=no
+```
+
+결과 **122 passed, 0 skipped**(66.42초). 신규 S1 DB/API 32개와 합성 단위 56개,
+기존 승인 사실·유형별 검토·승인 TTL/L5/폴링·세션·위치 이상 회귀를 포함한다.
+첫 관련 회귀의 KST 조건부 1개 skip은 실제 KST 호스트에 `TZ=Asia/Seoul`을 명시해
+최종 실행에서 검증했다. 기존 `utcnow()` 사용에 대한 폐기 예정 경고 103건은 남아 있다.
+`python scripts/check_code_conventions.py`는 104개 Python 파일 검사 통과.
+
+권한 매트릭스, 타부서/부서 결측/알 수 없는 역할, 자기 처리/처리자 결측,
+다른 소유 세션·종료/재인증 세션, 원문/비밀 응답 제외, 양쪽 로그 출처·요청 소유자,
+중복 평가 키·기간 경계·KST/UTC·페이지 연속성·커서 변조/권한 변경과 직접 근거 우회를
+확인했다. 각 원본 테이블의 전체 행을 DB 내부 해시로 비교해 사용자·자료·세션·
+접근·감사/민감·승인·담당 요청·BG·정책값의 조회 전후 불변을 확인했다.
+만료 시각이 지난 active BG도 조회로 상태 전이하지 않는다.
+새 화면은 S5 범위이므로 구현/검증하지 않았고, 운영 DB 역할/RLS 검증·
+운영 보안성/탐지 효과 평가는 수행하지 않았다. S2 이후는 착수하지 않았다.
+
+전체 회귀 후속 검증(2026-10-22): 사용자의 검증 요청에 따라 위 격리 클러스터를
+재기동하고 DB 이름·loopback 주소·포트가 `zerotrust_test/127.0.0.1/55439`인지
+연결 후 재확인했다. `source`에서 동일한 `POSTGRES_TEST_URL`, `TZ=Asia/Seoul`,
+기존 프로젝트 가상환경의 Python 경로를 해당 프로세스에 지정한 뒤
+`scripts/run.bat test -q --tb=short --show-capture=no`를 실행했다.
+코드 규칙 검사 **104개 파일 통과**, 전체 pytest **432 passed, 0 failed, 0 skipped**
+(273.14초). 기존 `datetime.utcnow()` 폐기 예정 경고 423건이 남아 있다.
+접근·인증·승인·세션·BG·S1 DB/API·설치 도우미·화면 상태를 포함한 현재 테스트
+스위트 결과이며 새 S5 화면의 실제 사용자 흐름이나 운영 보안성 검증은 아니다.
+검증용 PostgreSQL은 종료했다. 기능 코드는 추가 수정하지 않았으며 커밋·push는 하지 않았다.
 
 ### S2 — 1차 탐지 후보와 합성 시나리오
 
