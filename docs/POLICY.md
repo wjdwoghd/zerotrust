@@ -3,6 +3,197 @@
 이 문서는 확인된 구현·기존 명시 정책과 추가 결정이 필요한 항목을 구분한다.
 현재 구현을 모두 승인된 정책으로 간주하지 않는다.
 
+## 시스템 전반 AI 행동 분석 — 확장 설계
+
+2026-10-22 작성. **향후 개발 계약 초안이며 신규 분석은 미구현이다.**
+단계·완료 조건은 [ROADMAP S0~S7](../ROADMAP.md#시스템-전반-ai-행동-분석--단계별-개발-계획-2026-10-22)을 따른다.
+이 문서 작성은 자동 분석 활성화, 실제 자료 외부 전송, 새 보존·열람 권한,
+탐지 임계값 또는 접근 정책 변경의 승인이 아니다. 기존 승인 AI의 명시 호출·
+입력 제한과 기존 두 감사 후보 조회 계약은 유지한다.
+
+### 범위와 집행 경계
+
+- 로그인·환경·인증, 자료 접근·다운로드, 승인, 담당 관계, BG의 시간적·업무적
+  관계를 관찰한다. BG를 사용하지 않은 흐름도 대상이고 BG 자체는 위협 근거가 아니다.
+- 새 분석 결과는 관리자 검토 후보다. 기존 위험 점수·기본 레벨·최종 레벨과
+  구분한다. 접근 허용/차단·승인/반려·담당 등록·BG 발동/심사/취소·신뢰도·
+  세션·정책값을 변경하는 출력이나 실행 도구를 만들지 않는다.
+- 기존 `anomaly_service`의 점수·차단 동작은 유지한다. 새 후보·모델 실패·
+  미사용을 기존 접근 판단에 입력하지 않는다. 접근 경로는 AI 키를 읽거나 모델을 호출하지 않는다.
+- 최초 개발은 합성 데이터·모의 모델 응답으로 한다. 자동 분석은 별도 설정으로
+  기본 비활성화한다. 신규 기능의 운영 활성화는 아래 결정과 검증 완료 후 수행한다.
+- 분석·조회·폴링은 사용자 행동 집계에 포함하지 않는다. 분석 작업 자체의 감사
+  사건도 행동 분석 입력에서 제외해 재귀 알림·호출을 막는다.
+
+### 공통 사건·후보·AI 출력 계약
+
+아래 필드명은 신규 내부 계약의 기준이다. 기존 공개 응답은 변경하지 않는다.
+
+| 객체 | 필수 내용과 제약 |
+| --- | --- |
+| 사건 | `event_key`, `event_type`, `occurred_at`, `observed_at`, 내부 `actor_ref`, 확인 가능한 `session_ref/resource_ref/case_ref/request_ref/activation_ref`, `action`, `outcome`, `evidence_refs`, `unknown_reasons`, `signal_quality`. 연결 불가 키는 null과 사유를 사용. 내부 키를 외부 모델에 그대로 보내지 않음 |
+| 출처 | 허용된 테이블·행 ID·관측 시각·필드의 고정 서버 매핑. 사용자/모델이 테이블명이나 SQL을 지정할 수 없음. 동일 동작의 복수 출처는 검증 후 묶고 원본 보존 |
+| 분석 범위 | 시간대 있는 `[start,end)`, 스냅샷 시각, 대상 범위, 정렬/커서, `truncated`, 누락 범위·이유, 사용 규칙/계약 버전. 최신 관계와 당시 관계를 구분 |
+| 후보 | `candidate_key`, `candidate_type`, 분석 범위, 서버 관측 사실·근거, 결측, `analysis_status`. 후보 존재·검토 우선순위는 위협 확정이나 접근 위험 점수가 아님 |
+| AI 응답 | `assessment`(`review_needed/no_clear_issue/insufficient_evidence`), `summary`, `items[]`, `alternative_explanations[]`, `uncertainties[]`, `evidence_refs[]`. 각 item은 `text`와 해당 근거 별칭. 실행 명령·정책값·권한 변경 필드 없음 |
+
+시간은 UTC 기준 시간대 포함 값으로 비교하고 화면은 KST로 표시한다. 같은 시각의
+사건은 안정적인 보조 키로 정렬한다. 관측 순서만으로 인과관계를 확정하지 않는다.
+다운로드 희망·시도·허용·전송 성공을 구분하고 기록이 없으면 성공으로 간주하지 않는다.
+과거 담당/승인 상태가 보존되지 않았다면 현재 상태로 과거 정당성을 단정하지 않는다.
+
+AI 입력은 허용 목록에서 구성하고 근거 ID를 호출별 별칭으로 바꾼다. 원시 이름·
+사건번호·자료 본문·IP·위치·세션/토큰·OTP·비밀키·원시 감사 로그는 보내지 않는다.
+자연어 사유 해석은 D2에서 허용한 합성/최소화 데이터로만 수행한다. 가명화만으로
+실제 자료 전송이 허용된다고 판단하지 않는다. 모델은 추가 DB 조회·외부 검색·도구
+실행을 하지 않으며 입력의 사유 문자열은 지시가 아닌 데이터로 처리한다.
+
+서버는 JSON 스키마 외에도 필드·타입·enum·중복·길이·근거 소속을 검증한다.
+초기 개발 상한은 summary 500자, item 문구 300자, 각 목록 8개, 항목별 근거 8개다.
+이는 출력·비용 제한이며 탐지 기준이 아니다. 추가 필드·다른 스냅샷의 근거·
+없는 별칭·근거 없는 관측 사실 항목은 실패 처리한다. 정상 해석·불확실성은
+추측임을 구분하고 근거 없는 사실로 복원하지 않는다. `no_clear_issue`도 안전 보증이 아니다.
+문구의 사실 일치 여부는 형식 검증만으로 보장되지 않아 평가·사람의 검토가 필요하다.
+
+### 결정이 필요한 항목과 개발 가능한 범위
+
+아래 값은 **미확정**이다. Codex는 합의 근거와 날짜를 기록한 뒤 확정으로 바꾼다.
+기존 구현에 비슷한 상수가 있다는 이유로 새 분석 정책의 기본값으로 채택하지 않는다.
+
+| ID | 결정할 내용 | 결정 전 가능한 작업 / 활성화 제한 |
+| --- | --- | --- |
+| D1 탐지 기준 | 유형별 기간·최소 반복·같은 대상 정의·정상 예외, 세션 간 연결, 기준선 최소 표본·갱신·오염 대응 | 계약·집계·주입 가능한 탐지기·합성 시험 가능. 실제 기록 후보 판정 및 승인 편중·장기 분석 활성화 금지 |
+| D2 입력·외부 처리 | **개발 범위 확정(2026-10-22 사용자 선택): S1~S3는 합성 데이터·모의 AI부터 개발.** 자연어 사유·자료 메타데이터의 실제 허용 범위, 최소화/가명화, 제공자 처리·보존 조건은 미확정 | 모의 전송과 합성 입력 검증 가능. 이번 선택에 외부 모델 호출 허가는 포함되지 않음. 실제 사유/감사/사건 자료의 신규 외부 전송 금지 |
+| D3 저장·보존 | 작업 메타데이터·커서·후보·모델 의견·사람 판정별 저장 여부, 기간·열람·삭제/만료, 재현용 버전/근거 범위 | 합성 메모리 저장으로 서비스 시험 가능. 실제 결과 영구 저장·새 자동 삭제·감사 원문 복제 금지. 기존 감사 append-only 유지 |
+| D4 검토 권한 | **진행 방향 확정(2026-10-22 사용자 선택): 기존 역할별 범위를 먼저 대조한 뒤 확정.** 신규 관리자/부관리자별 범위, 관할·타부서·자기 관련 분석의 열람·처리, 서비스 worker 조회 범위는 미확정 | S0의 권한 대조표를 근거로 후속 결정. 권한 주입·거절 시험 가능. 신규 실제 데이터 API 공개/worker 전역 권한 부여 금지. 권한 미확인은 거절 |
+| D5 실행·운영 | 관찰 주기·최대 지연·후보량·동시성·재시도/만료·호출 예산·과부하 처리·중복 알림 묶기 | 비활성 설정·합성 worker·장애 시험 가능. 실제 자동 실행과 준실시간 목표 주장 금지 |
+| D6 효과 판정 | 평가 자료·독립 정답 판정자·분모·최소 표본·기간·허용 오탐/미탐·지연 목표·검토 부담 | 정답 근거가 있는 합성 대조 사례와 지표 계산 구현 가능. 운영 탐지 성능·성공률 달성 주장 금지 |
+
+미확정 항목이 있어도 해당 값에 의존하지 않는 단계는 진행한다. 결정 전에는
+합성 입력만 받는 테스트 경로를 사용하고 운영 API로 위장하거나 기존 검토 API의
+권한/전송 제한을 완화하지 않는다. 실제 활성화 전에 D1~D5와 필요한 DB/API·화면
+검증을 충족하고 D6 기준으로 결과를 보고한다. 장기·관계 분석은 각 유형의 기준을
+추가로 결정한다. 자동 제재·학습/파인튜닝·새 외부 알림 채널은 현재 범위 밖이다.
+
+### 감사·장애·효과 평가 원칙
+
+- 원본 감사/민감 행은 수정·삭제하지 않는다. 작업 감사에는 분석 범위의 내부 참조,
+  작업/후보 키, 실행 주체, 상태·오류 코드, 모델·계약/규칙 버전·시각 등 허용한
+  최소 메타데이터만 기록한다. 프롬프트·사유·모델 원문·비밀값은 기록하지 않는다.
+  새 AuditEvent와 허용 필드는 코드·테스트로 함께 추가한다.
+- 저장/조회 실패, 키 미설정, 모델 거부·시간 초과·형식 오류, 입력 부족·잘림을
+  빈 정상 분석으로 바꾸지 않는다. 분석 실패는 명시적으로 표시하고 기존 서버
+  인증·인가·감사 실패 정책은 유지한다. DB 연결/트랜잭션을 모델 대기 동안 보유하지 않는다.
+- 근거 목록과 상세 조회는 같은 범위 검증을 거친다. URL의 ID나 모델 별칭만으로
+  열람을 허용하지 않는다. 후보의 기각·확인은 원본 감사와 별개이며 수동 승인·
+  BG 심사 판정을 대신하지 않는다. 사람 피드백으로 정책을 자동 갱신하지 않는다.
+- 오탐은 정답 검토상 정상인 사례를 문제 후보로 표시한 것, 미탐은 정답상 문제인
+  사례를 표시하지 못한 것이다. 정밀도=정답 문제 후보/전체 문제 후보,
+  재현율=탐지한 문제/전체 정답 문제로 유형별 계산한다. 분모가 0이면 산출 불가다.
+  판단 불가는 별도 비율로 보고하고 정답 문제의 판단 불가는 탐지 성공에 넣지 않는다.
+- 탐지 지연은 원인 사건 커밋부터 검토 후보가 조회 가능해질 때까지로 정의하고
+  AI 설명 완료 지연과 분리한다. 중복 후보·잘못된 근거·검토자 정정과 소요 시간도
+  측정한다. 합성 시연 통과를 실제 내부자 탐지나 운영 보안성 검증으로 표현하지 않는다.
+
+### S0 조사 결과 — 사건·데이터 지도 (2026-10-22)
+
+**확인 수준: 현재 작업 트리의 코드·마이그레이션·관련 테스트 내용 대조.**
+실행 DB의 적용 버전·행 완전성·DB 역할/RLS·화면 동작은 이번 조사에서 확인하지 않았다.
+아래 사건명은 enum 목록보다 실제 INSERT/서비스 호출을 기준으로 적었다.
+모든 API 연결은 [server.py](../source/server.py)의 라우트와 대조했다.
+
+| 흐름 | 입력→기록 경로와 실제 저장 필드 | 연결 키·시각 | 재현 범위·결측·신호 성격 |
+| --- | --- | --- | --- |
+| 1. 로그인·인증·세션 | [auth_handler.py](../source/api/auth_handler.py) `LoginHandler`→비밀번호/기기/위치 확인→`audit_logs`의 `layer=operation`: `LOGIN_FAILED`, `LOGIN_SUCCESS`. `MFAVerifyHandler`→`sessions` INSERT와 `MFA_VERIFIED`; 관리자 게이트 사용 시 `ADMIN_GATED_SESSION_STARTED`. 실패는 `MFA_FAILED` 등 분기별 사건 | 사용자=`user_id`; MFA 완료=`details.session_id`→`sessions.id`; 게이트 세션=`approval_request_id`→`login_approval_requests.id/used_session_id`. `audit_logs.created_at`, `sessions.login_at` | `LOGIN_SUCCESS`는 최종 MFA 완료 전 단계. `LOGIN_FAILED`에는 세션 ID가 없고 존재하지 않는 계정·잠금/비활성 조기 거절에는 이 실패 INSERT가 없음. 사용자·근접 시각만으로 최종 세션을 확정 연결하지 않음. 인증 결과는 서버 확인 사실이며 실제 사용자가 누구인지의 증명은 아님 |
+| 2. 환경·세션 변화 | [base_handler.py](../source/api/base_handler.py) 컨텍스트→로그인/접근 평가. `sessions`와 `access_logs`의 `device_id/ip_address/location`; `DEVICE_NOT_REGISTERED`, `DEVICE_USED_UNREGISTERED`, `IMPOSSIBLE_TRAVEL_LOGIN_BLOCKED`, `LOGIN_BLOCKED_LOCATION_NOT_ALLOWED`; [access_evaluator.py](../source/core/access_evaluator.py) 위치 이상→`CONCURRENT_SESSION_LOCKED`, `LOCATION_ANOMALY_LOCKED`; `session_guard.check_session`→BaseHandler 만료 감사 | 세션 행 ID와 사건별 `session_id` 또는 잠근 ID 목록; 일부 사건은 사용자만 있음. 행 `created_at/login_at`, 만료 판정 `checked_at` | `X-Device-Id/X-Location/X-IP-Address/X-Sim-Hour` 및 로그인 body 값이 입력될 수 있는 시연 신호. 등록값과 비교했다는 사실을 검증된 단말/물리 위치로 표현하지 않음. 마지막 활동·재인증 시각은 갱신되며 환경 이력 전체를 보존하는 테이블은 아님 |
+| 3. 자료 접근·비담당 클릭 | [resource_handler.py](../source/api/resource_handler.py) `CaseDetailHandler`→`evaluate_access`→`_log_access`: `access_logs`에 사용자·세션·자료·행동·4축/총점·최종 레벨·사유, `audit_logs.ACCESS_DECISION`에 자료·레벨·점수·권한. `CaseRestrictedClickHandler`→`UNASSIGNED_CASE_CLICK`에 자료·세션·클릭 순번 | `access_logs.reason_code`에 평가 호출의 `request_id`가 저장되고 `audit_logs.request_id`와 대응. 사용자·자료도 대조. `access_logs.created_at` 및 감사 시각 | 평가가 수행돼 기록된 결과이며 실제 화면 열람/인지의 증거는 아님. 인증 전 거절·자원 없음 등 모든 실패가 접근 행을 만드는 것은 아님. `/status`는 접근 행을 쓰지 않지만 변화 시 `ACCESS_SCORE_CHANGED` 감사를 남김. 이를 별도 클릭으로 세지 않음 |
+| 4. 다운로드 | `CaseDownloadHandler`의 POST `/download`, `CaseFileHandler`의 GET `/file` 모두 `evaluate_access(action_type='download')`→접근/결정 로그. `/file`만 `can_download` 확인 후 본문 attachment 응답 작성. 현재 [화면](../source/static/index.html)은 `/file` 직접 요청 | 접근 행 사용자·자료·세션과 평가 요청 키; `created_at`. 요청 URL·HTTP 완료 상태·실전송 바이트는 `_log_access` 저장 필드가 아님 | 희망=`want_download`, 평가 시도=`action_type`, 당시 허용=`action_permissions`를 구분. `/download` 평가와 `/file` 응답을 로그만으로 확정 구별할 수 없고 전송 완료/브라우저 저장 완료 사건도 확인되지 않음. 두 평가를 시각만 보고 한 동작으로 합치거나 다운로드 성공으로 세지 않음 |
+| 5. 승인 요청·결정·로그인 게이트 | `CaseApprovalRequestHandler`→`approvals(id,requester_id,resource_id,reason,status,requested_at)` 및 `audit_log(layer=operation)`→**`operation_logs.ADMIN_APPROVAL_REQUESTED`**의 `approval_id/resource_id/reason/want_download/reason_source`. [admin_handler.py](../source/api/admin_handler.py) 승인/반려→`approvals.approver_id/resolved_at/download_allowed`, `audit_logs.APPROVAL_GRANTED/APPROVAL_REJECTED`. 로그인 게이트는 `LoginHandler`→`login_approval_requests`, 관리자 처리→`ADMIN_APPROVAL_GRANTED/ADMIN_APPROVAL_REJECTED`, MFA에서 사용 처리 | 자료 승인=`details.approval_id`→`approvals.id`; 로그인 승인=`details.request_id` 또는 `approval_request_id`→로그인 요청 ID. 결정 감사의 `user_id`는 승인자이므로 요청자와 구분. 요청/처리/감사/로그인 승인 만료 시각 별도 | 자료 승인 원사유는 선택이며 기본 문구 대체 가능. `reason_source` 없는 과거 기록은 작성 주체 미확인. 로그인 사유는 서버 생성 조건 설명으로 사용자의 업무 목적이 아님. 자료 승인 TTL은 `resolved_at`+현재 설정으로 평가하며 별도 만료 상태 전이·취소 API는 확인되지 않음. 과거 TTL 설정 이력은 별도 근거 필요 |
+| 6. 담당 등록·관계 | `CaseAssignmentRequestHandler`→`case_assignment_requests`·`CASE_ASSIGNMENT_REQUESTED`; OTP 요구/인증→관련 감사와 요청 시각 필드; `CaseAssignmentApproveHandler`→`users.assigned_cases` 추가 및 요청 `final_approved_by/final_approved_at/status`, `CASE_ASSIGNMENT_APPROVED/REJECTED` | `details.assignment_request_id`→요청 행; 행의 `requester_id/resource_id`와 검증. `requested_at/otp_required_at/otp_verified_at/final_approved_at/updated_at` | 담당 값은 자료 ID와 사건번호 문자열이 혼재 가능. 현재 관계는 `users.assigned_cases`, 현재 직무는 `users.job_scope`와 `resources.job_tags`. 요청 승인 시각은 남지만 시드/과거 등록·관계 변경 전체의 유효기간 이력은 없음. 스키마에 `cancelled`는 있으나 현재 라우트에 취소·만료/담당 해제 전용 경로는 확인되지 않음 |
+| 7. BG 발동·사용·종료 | [break_glass_handler.py](../source/api/break_glass_handler.py)→[break_glass.py](../source/core/break_glass.py) `activate/consume/release/revoke/review`: `break_glass_activations`에 발동자·세션·범위·자료·최소 등급·사유·시각/상태; `BREAK_GLASS_ACTIVATED/USED/RELEASED/REVOKED/EXPIRED/REVIEWED_*` 감사. `activate`는 `sensitive_logs`에도 사유 해시·바이트를 기록 시도 | `details.activation_id`→발동 행·발동자 일치 확인; 사용의 `resource_id`, 평가 `request_id`로 접근 결정과 연결. `activated_at/expires_at/last_activity_at/released_at/revoked_at/reviewed_at` 및 감사 시각 | 실제 사용은 `access_evaluator`가 `mutate_state`일 때 `consume` 호출. 사용 감사 자체에는 행동/세션이 없어 접근 로그로 보완. `get_active_for_user`는 조회 중 만료 전이·감사를 발생시키므로 S1 읽기 서비스에서 호출 금지. 만료 감사는 만료 발견 시각으로 실제 TTL 도달 시각과 다름. broad BG는 단일 자료 요청이 아님 |
+
+스키마 근거는 [001](../source/migrations/001_init_postgres.sql),
+[002](../source/migrations/002_audit_split.sql),
+[006](../source/migrations/006_login_break_glass.sql),
+[008 로그인 게이트 개명](../source/migrations/008_rename_admin_approval.sql),
+[009 BG](../source/migrations/009_break_glass_activations.sql),
+[010 다운로드 승인](../source/migrations/010_approvals_download_allowed.sql),
+[012 직무 태그](../source/migrations/012_job_relevance.sql),
+[021 담당 등록](../source/migrations/021_case_assignment_requests.sql)이다.
+확인한 마이그레이션 파일의 마지막 번호는 023이며 실행 DB에 적용됐다는 뜻은 아니다.
+
+#### S1에서 유지할 연결·시점·감사 한계
+
+1. 서로 다른 ID 공간을 구분한다. HTTP `BaseHandler.request_id`, 접근 평가가 자체
+   생성하는 8자리 `request_id`, 로그인 승인 JSON의 숫자 `request_id`, 자료 승인
+   `approval_id`, 담당 등록 ID, BG ID는 하나의 전역 요청 키가 아니다. 접근 키는
+   유일 제약이 확인되지 않아 키·사용자·자료와 건수의 유일성을 함께 확인한다.
+2. `operation`은 물리 테이블명이 아니다. `audit_log(layer='operation')`는
+   `operation_logs`로 쓰지만 인증 핸들러의 직접 SQL은 같은 layer를 `audit_logs`에
+   쓴다. 양쪽을 사건별 허용 목록으로 읽고 `audit_logs`만 조회해 전체 이력이라 하지 않는다.
+   `LOGIN_FAILED/MFA_FAILED/MFA_VERIFIED/APPROVAL_GRANTED/CASE_ASSIGNMENT_*` 등 실제
+   문자열은 enum과 일치하지 않는 경우가 있다. S0에서 기존 코드를 정리하지 않는다.
+3. 담당 등록·자료 승인 요청에는 세션 FK가 없다. 동일 사용자의 세션 간 시간선을
+   구성할 수는 있지만 개별 요청을 특정 세션에 확정 배정하지 않는다. 같은 자료의
+   이전 거절과 후속 승인/BG도 직접 참조가 없으면 관찰된 순서로만 표현한다.
+4. `resources`에 `case_number`가 있지만 별도 사건 PK·인물/조직 개체 테이블·자료와
+   인물의 검증된 관계는 조사한 스키마/호출 경로에서 확인되지 않았다. `job_tags`는
+   직무 범주이며 사람 식별 태그가 아니다. 제목·본문 문자열 일치로 같은 인물을 확정하지 않는다.
+5. `created_at`은 DB 기록 시각이며 실제 커밋 시각·사용자 행위 시작/전송 완료 시각과
+   동일하지 않다. 시각 근접으로 감사 중복을 제거하지 않고 확인 가능한 연결만 묶는다.
+   접근/감사 양쪽, BG 사용 감사 등은 한 평가의 복수 근거일 수 있다. 조회 잘림·
+   한쪽 결측·동일 키 복수 행을 별도 사유로 반환하도록 S1 테스트에 넣는다.
+6. `audit_log`는 DB 오류 시 rollback 후 로그를 출력하고 예외를 전파하지 않는
+   경로가 있다. BG 민감 기록도 예외를 잡는다. 따라서 성공 응답만으로 감사가
+   완전하다고 가정하지 않는다. 새 분석에서는 결측으로 처리하고 기존 감사 실패
+   처리 개선은 별도 작업으로 남긴다. 이번 조사로 현재 구현을 정책으로 승인하지 않는다.
+7. `sensitive_logs.payload_encrypted`에 BG 사유를 넣는 현재 코드는 **평문 바이트**다.
+   필드명/해시는 암호화를 뜻하지 않는다. 002의 audit 행 수정/삭제 차단 트리거와
+   sensitive RLS 정의는 확인했으나 실제 역할/적용 여부·TRUNCATE/관리자 우회까지
+   검증하지 않았다. 새 분석은 민감 원문 테이블 읽기·원문 복제를 요구하지 않는다.
+
+#### 기존 열람·검토 권한 대조 — D4 결정 자료
+
+| 경로 | 코드에서 확인한 제한 | 새 분석에 그대로 적용할 수 없는 이유 |
+| --- | --- | --- |
+| `AuditLogHandler`, 기존 두 감사 후보 GET | `require_admin`: admin/superadmin/deputy_admin 허용. 조회 SQL에 부서·관할·자기 관련 제외 조건 없음 | 기존 단일 감사 조회보다 여러 사건·세션을 연결한 결과의 정보 범위가 넓음. 기존 전역 조회를 신규 전역 권한 승인으로 간주하지 않음 |
+| `AccessLogHandler` | 관리자 계열은 전체 또는 사용자 필터, 일반 사용자는 본인 | 일반 사용자 본인 로그 권한은 새 AI 후보·타인 관계 열람 권한이 아님 |
+| 자료 접근 승인 사실·AI | 관리자 계열, pending, 자기 요청 금지, 사실 로더의 필수 근거 검사 | 처리 완료 후 사용 이력이나 전체 시간선의 권한/상태 계약이 아님 |
+| 로그인·담당 등록·BG 사실·AI | 관리자 계열 + 자기 검토 금지. 로그인 pending, 담당 등록 대기 상태 + `reviewer_role`(superadmin 예외), BG 종료·미심사 | 활성 BG 관찰을 위해 사후 심사 API 상태 제한을 풀지 않음. 승인별 조건을 전체 사용자 시간선의 권한으로 대체할 수 없음 |
+
+근거: [BaseHandler](../source/api/base_handler.py),
+[감사 조회](../source/api/audit_handler.py),
+[승인 사실](../source/core/approval_review_facts.py),
+[유형별 사실](../source/core/other_approval_review.py),
+[기존 후보 조회](../source/api/other_approval_review_handler.py).
+**대조는 완료했으나 새 API·worker의 역할/관할/자기 관련 범위는 미확정이다.**
+S1은 사용자가 선택한 합성 입력과 권한 주입 테스트로 진행할 수 있고 실제 조회 공개는
+D4 확정 후 연결한다. 기존 수동 승인·BG 심사 권한은 변경하지 않는다.
+
+#### C1·C2의 입력 충족 여부와 후속 작업
+
+| 후보 | 현재 확인된 입력 | 부족하거나 결정이 필요한 부분 | S1~S3에서 가능한 범위 |
+| --- | --- | --- | --- |
+| C1 업무 목적과 사용 불일치 | 자료 승인/담당 등록의 사유, BG 사유·범위, 이후 접근의 자료·행동·시각, 자료 유형·직무 태그, 현재 업무 관계 | 자료 사유는 기본 문구일 수 있음. 로그인 게이트 사유는 업무 목적이 아님. 과거 담당·자료 메타데이터의 완전한 스냅샷, 사건 간 업무 연관성·인물 관계, 의미 해석용 전송 계약 부족 | 합성 사유·자료 관계·과거 시점 fixture를 명시적으로 제공해 모의 AI와 검증. 실제 입력 부족은 `insufficient_evidence`. 현행 모델 입력에는 사유 원문을 임의 추가하지 않음 |
+| C2 여러 경로의 반복 접근 | 사용자·자료별 거절/접근, 승인·담당 요청/처리, BG 발동/사용 ID와 시각 | 반복 기간·최소 조건·같은 대상 정의(D1), 요청별 세션 연결과 거절→권한 요청의 직접 참조 부족. broad BG와 단일 자료 접근은 일대일 아님 | 합성 데이터에서 자료 ID가 검증된 순서를 관찰 사실로 구성하고 정상 재시도 대조군 포함. 기간/임계값은 테스트 인자로만 주입하고 실제 후보 판정은 활성화하지 않음 |
+
+S0에서 새 수집 필드나 마이그레이션은 추가하지 않았다. S1은 기존 기록의 정규화,
+명시적 결측·불명확 연결, 시연 신호 구분부터 구현한다. 실제 다운로드 완료 기록,
+과거 관계 스냅샷·인물/조직 관계·전역 사건 상관 키를 새로 수집하려면 각각의 필요성,
+보존·민감도·호환 영향을 별도 범위로 검토한다. 부족한 입력을 자동 수집 승인으로 해석하지 않는다.
+
+관련 테스트의 의도는 `tests/unit/test_approval_review_facts.py`의 기본 사유·결측·
+읽기 불변, `test_other_approval_review.py`의 상태/역할/자기 검토·근거 검증,
+`tests/scenarios/test_approval_review_facts.py`의 API 권한·불변,
+`test_score_approval_flow.py`의 승인 TTL·L5·폴링 불변,
+`test_location_anomaly_session_lock.py`의 위치 이상·잠금을 코드로 확인했다.
+이는 재사용할 회귀 목록이며 이번 S0에서 실행한 결과가 아니다.
+
+결정 현황: D1·D3·D5·D6는 합의 근거가 없어 미확정 유지. D2는 사용자 선택에 따라
+합성·모의 개발만 확정했고 실제 전송 조건은 미확정이다. D4는 기존 역할 대조를
+완료했으며 신규 권한 확정은 남아 있다. 이 상태는 S0 코드 조사 완료와 양립하며
+이후 단계의 실제 데이터 연결·활성화 조건을 충족했다는 뜻은 아니다.
+
 ## 자료 접근 승인 서버 사실 조회 — 2단계 구현
 
 `GET /api/admin/approvals/{id}/review-facts`는 관리자 계열의 `pending` 자료 접근
