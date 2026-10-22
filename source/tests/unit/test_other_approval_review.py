@@ -1,11 +1,13 @@
 """Phase 4 contracts for minimal facts, review authorization and AI output validation."""
 from datetime import datetime, timezone
+import json
 
 import pytest
 
 from core.approval_review_facts import ReviewFactsError
 from core.other_approval_review import load_review_facts, build_model_input, validate_review
 from integrations.openai_review_transport import ModelOutputError
+from integrations.openai_other_approval_client import generate_review
 
 
 NOW = datetime(2026, 10, 6, tzinfo=timezone.utc)
@@ -109,3 +111,31 @@ def test_unobserved_alias_and_invalid_decision_are_rejected():
     raw["review_opinion"] = "approved"
     with pytest.raises(ModelOutputError):
         validate_review(raw, aliases)
+
+
+@pytest.mark.parametrize("evidence", [[], ["E1", "E2"]])
+def test_generation_schema_limits_evidence_to_verified_aliases(evidence):
+    """실제 전송 스키마에서 임의 근거 생성과 항목 상한 초과를 제한한다."""
+    raw = {"review_opinion": "check_further", "items": [], "uncertainties": [],
+           "evidence_refs": []}
+
+    def post(request, timeout):
+        body = json.loads(request.data)
+        properties = body["text"]["format"]["schema"]["properties"]
+        refs = properties["evidence_refs"]
+        assert refs["maxItems"] == len(evidence)
+        if evidence:
+            assert refs["items"]["enum"] == evidence
+        else:
+            assert "enum" not in refs["items"]
+        for name in ("items", "uncertainties"):
+            assert properties[name]["maxItems"] == 8
+            assert properties[name]["items"]["properties"]["evidence_refs"] == refs
+        assert body["store"] is False
+        assert "Korean" in body["instructions"]
+        return {"status": "completed", "output": [{"type": "message", "content": [
+            {"type": "output_text", "text": json.dumps(raw)}]}]}
+
+    result = generate_review(facts={"evidence_refs": evidence}, api_key="test-key",
+                             model="test-model", post_json=post)
+    assert result == raw
