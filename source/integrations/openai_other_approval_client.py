@@ -17,21 +17,27 @@ def generate_review(*, facts, api_key, model, timeout=20.0, post_json=None):
     """Send only the caller's allowlisted projection; return untrusted JSON."""
     if not isinstance(api_key, str) or not api_key.strip():
         raise MissingApiKeyError("OPENAI_API_KEY is not configured")
+    evidence_refs = facts.get("evidence_refs", [])
+    references = {"type": "array", "maxItems": min(8, len(evidence_refs)),
+                  "items": {"type": "string", **({"enum": evidence_refs} if evidence_refs else {})}}
     item = {"type": "object", "properties": {
-        "text": {"type": "string"}, "evidence_refs": {"type": "array", "items": {"type": "string"}},
+        "text": {"type": "string"}, "evidence_refs": references,
         "no_evidence_reason": {"type": ["string", "null"]}},
         "required": ["text", "evidence_refs", "no_evidence_reason"], "additionalProperties": False}
     properties = {"review_opinion": {"enum": ["check_further", "request_more_information", "no_issue_identified"]},
-                  "items": {"type": "array", "items": item},
-                  "uncertainties": {"type": "array", "items": item},
-                  "evidence_refs": {"type": "array", "items": {"type": "string"}}}
+                  "items": {"type": "array", "maxItems": 8, "items": item},
+                  "uncertainties": {"type": "array", "maxItems": 8, "items": item},
+                  "evidence_refs": references}
     schema = {"type": "object", "properties": properties, "required": list(properties),
               "additionalProperties": False}
     body = {"model": model, "store": False,
             "instructions": ("Give nonbinding administrative review advice from structured facts only. "
                              "Raw reasons, identities and case content are unavailable. "
                              "Do not approve, reject, infer missing facts or invent evidence. "
-                             "Use only provided evidence aliases."),
+                             "Write explanations in Korean. Use only provided evidence aliases. "
+                             "Never repeat an alias within an evidence_refs list. "
+                             "For unsupported statements use empty evidence_refs and explain "
+                             "the missing evidence in no_evidence_reason."),
             "input": json.dumps(facts, ensure_ascii=False, allow_nan=False, separators=(",", ":")),
             "text": {"format": {"type": "json_schema", "name": "other_approval_advice",
                                 "strict": True, "schema": schema}}}

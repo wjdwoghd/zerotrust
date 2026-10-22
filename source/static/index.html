@@ -880,9 +880,195 @@
             model_timeout: 'AI 응답 시간이 초과됐습니다. 잠시 후 다시 시도해 주세요.',
             model_refusal: 'AI가 이 요청에 대한 의견 생성을 거부했습니다.',
             model_schema_invalid: 'AI 응답 형식을 검증할 수 없습니다. 수동으로 검토해 주세요.',
+            evidence_ref_invalid: 'AI가 제시한 근거를 서버에서 검증하지 못했습니다. 다시 요청하거나 수동으로 검토해 주세요.',
             openai_error: 'AI 호출에 실패했습니다. 서버의 연결·API 설정을 확인해 주세요.',
         };
         const aiReviewErrorLabel = (code) => AI_REVIEW_ERROR_LABELS[code] || 'AI 검토에 실패했습니다. 수동으로 검토해 주세요.';
+
+        // 승인 유형과 관계없이 같은 표시 규칙을 사용한다. API 원본과 판단은 변경하지 않는다.
+        const REVIEW_LABELS = {
+            request: '요청 정보', resource: '자료 정보', work_relation: '업무 관계',
+            policy_facts: '정책 관측 정보', fields: '확인 항목', past_decisions: '과거 처리 이력',
+            approval_id: '자료 승인 요청 번호', review_type: '검토 유형', target_id: '검토 대상 번호',
+            observed_at: '확인 시각', requested_at: '요청 시각', resolved_at: '처리 시각',
+            status: '상태', reason_origin: '요청 사유 작성 방식', want_download: '다운로드 요청',
+            sensitivity_grade: '민감도 등급', requires_approval: '관리자 승인 필요',
+            approval_basis: '승인 필요 근거', resource_flag: '자료에 승인 필수 설정',
+            grade_at_least_four: '민감도 4등급 이상', assigned_case: '담당 사건 일치',
+            same_department: '소속 부서 일치', job_relevance: '업무 관련성',
+            last_observed_risk_score: '마지막으로 관측한 위험점수',
+            last_observed_final_level: '마지막으로 관측한 최종 접근 레벨',
+            score_base_level: '점수 기준 기본 레벨', immediate_block: '즉시 차단 여부',
+            policy_version: '정책 버전', current_evaluation: '현재 접근 평가',
+            records: '처리 기록', source: '출처', related_sources: '관련 근거',
+            comparison: '유사성 비교', unknown_reason: '확인할 수 없는 이유',
+            reason_summary: '요청 사유 요약', missing_items: '보완이 필요한 정보',
+            contradictions: '서로 맞지 않는 정보', similar_decisions: 'AI가 참조한 과거 처리 이력',
+            review_opinion: 'AI 검토 의견', items: '검토 내용', server: '서버에서 확인하지 못한 정보',
+            ai: 'AI 분석의 한계', evidence_ids: '검증된 근거', no_evidence_reason: '근거가 없는 이유',
+            otp_state: 'OTP 인증 상태', expiry: '대기 요청 만료', reviewer_role: '검토자 역할',
+            current_scope_compatible: '현재 담당 범위와의 적합성', request_audit: '요청 감사 기록',
+            scope: '긴급 접근 범위', min_grade: '최소 민감도 등급', activated_at: '발동 시각',
+            expires_at: '만료 시각', activation_audit: '발동 감사 기록', use_count: '긴급 접근 사용 횟수',
+        };
+        const REVIEW_VALUES = {
+            request_more_information: '추가 정보 보완 필요', check_further: '추가 검토 필요',
+            no_issue_identified: '제공된 정보에서 특이사항을 찾지 못함 (승인 권고 아님)',
+            completed: '검토 완료', pending: '승인 대기', pending_admin: '관리자 검토 대기',
+            approved: '승인됨', rejected: '반려됨', released: '사용자 종료',
+            expired: '만료됨', revoked: '취소됨', otp_required: 'OTP 인증 필요',
+            otp_verified: 'OTP 인증 완료', verified: '인증 완료', required: '인증 필요',
+            not_required: '인증 불필요', server_default: '서버 기본 문구', user_input: '사용자 직접 작성',
+            login: '로그인 승인', assignment: '담당 사건 등록', break_glass: '긴급 접근 사후 심사',
+            superadmin: '최고관리자', admin: '관리자', subadmin: '부관리자', deputy_admin: '부관리자',
+            all: '전체 범위', department: '소속 부서', resource: '지정 자료',
+            broad: '최소 민감도 등급 이상 자료', unavailable: '비교할 수 없음',
+            'approvals:same_requester_and_resource_before_request': '이번 요청 이전의 동일 사용자·동일 자료 승인 기록',
+        };
+        const REVIEW_UNKNOWN_REASONS = {
+            not_recorded_separately: '별도 항목으로 기록되지 않았습니다.',
+            not_recorded_with_access_log: '접근 기록에 함께 저장되지 않았습니다.',
+            read_only_no_re_evaluation: '읽기 전용 조회이므로 현재 접근 평가를 다시 실행하지 않았습니다.',
+            similarity_and_comparison_criteria_unsettled: '과거 결정의 유사성·비교 기준이 정해지지 않았습니다.',
+            no_prior_decision_for_exact_pair: '동일 사용자·동일 자료의 이전 처리 이력이 없습니다.',
+            request_audit_missing_or_ambiguous: '요청 감사 기록이 없거나 하나로 특정할 수 없습니다.',
+            request_audit_download_missing: '요청 감사 기록에 다운로드 희망 여부가 없습니다.',
+            legacy_reason_origin_not_recorded: '기존 기록에 요청 사유의 작성 방식이 없습니다.',
+            no_prior_access_evaluation: '이전 접근 평가 기록이 없습니다.',
+            score_not_logged: '위험점수가 기록되지 않았습니다.', level_not_logged: '접근 레벨이 기록되지 않았습니다.',
+            invalid_assignment_data: '담당 사건 정보를 확인할 수 없습니다.',
+            invalid_job_relation_data: '업무 관련성 정보를 확인할 수 없습니다.',
+            resource_department_missing: '자료의 소속 부서 정보가 없습니다.',
+            login_gate_otp_not_recorded: '로그인 승인 단계의 OTP 인증 상태는 기록되지 않습니다.',
+            pending_request_has_no_expiry: '대기 요청에는 만료 시각이 지정되어 있지 않습니다.',
+            current_scope_unavailable: '현재 담당 범위를 확인할 수 없습니다.',
+            activation_audit_missing_or_ambiguous: '긴급 접근 발동 감사 기록이 없거나 하나로 특정할 수 없습니다.',
+            use_audit_limit_exceeded: '사용 감사 기록이 조회 상한을 넘어 전체 횟수를 확인할 수 없습니다.',
+        };
+        const REVIEW_SOURCES = {
+            approvals: '자료 승인 요청', resources: '자료', users: '사용자',
+            operation_logs: '업무 기록', access_logs: '접근 평가 기록', audit_logs: '감사 기록',
+            login_approval_requests: '로그인 승인 요청', case_assignment_requests: '담당 사건 등록 요청',
+            break_glass_activations: '긴급 접근 발동 기록',
+        };
+        const reviewLabel = key => REVIEW_LABELS[key] || DETAIL_KEY_LABELS[key] || key.replaceAll('_', ' ');
+        const reviewReason = reason => REVIEW_UNKNOWN_REASONS[reason] || reason;
+        const reviewTime = value => {
+            if (!value) return '시각 미확인';
+            const date = new Date(value);
+            return Number.isNaN(date.getTime()) ? value : date.toLocaleString('ko-KR', {
+                timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+            }) + ' (한국 시간)';
+        };
+
+        function ReviewEvidence({ items = [] }) {
+            if (!items.length) return <span className="text-slate-500">제시된 근거 없음</span>;
+            return <span className="inline-flex flex-wrap gap-1">{items.map((item, index) =>
+                <span key={index} className="rounded border border-slate-200 bg-slate-50 px-2 py-0.5">
+                    {REVIEW_SOURCES[item.table] || item.table} #{item.id}
+                </span>
+            )}</span>;
+        }
+
+        function ReviewValue({ value, field = '' }) {
+            if (value === null || value === undefined) return <span className="text-slate-500">미확인</span>;
+            if (typeof value === 'boolean') return value ? '예' : '아니오';
+            if (typeof value === 'number') return field.includes('level') ? `L${value}` : String(value);
+            if (typeof value === 'string') {
+                if (field === 'unknown_reason' || field === 'reason') return reviewReason(value);
+                if (/^\d{4}-\d{2}-\d{2}T/.test(value)) return reviewTime(value);
+                return REVIEW_VALUES[value] || value || '내용 없음';
+            }
+            if (Array.isArray(value)) {
+                if (!value.length) return <span className="text-slate-500">제시된 항목 없음</span>;
+                return <ul className="list-disc pl-5 space-y-2">{value.map((item, index) =>
+                    <li key={index}><ReviewValue value={item} field={field} /></li>
+                )}</ul>;
+            }
+            if ('value' in value && 'unknown_reason' in value) {
+                return <div className="space-y-1">
+                    <div><ReviewValue value={value.value} field={field} /></div>
+                    {value.unknown_reason && <p className="text-amber-800">{reviewReason(value.unknown_reason)}</p>}
+                    <div className="text-xs text-slate-500 flex flex-wrap gap-2">
+                        {value.source && <ReviewEvidence items={[value.source, ...(value.related_sources || [])]} />}
+                        {value.observed_at && <span>확인: {reviewTime(value.observed_at)}</span>}
+                    </div>
+                </div>;
+            }
+            if ('table' in value && 'id' in value) return <ReviewEvidence items={[value]} />;
+            if ('text' in value) return <div className="space-y-1">
+                <p className="whitespace-pre-wrap break-words">{value.text}</p>
+                <div className="text-xs"><ReviewEvidence items={value.evidence_ids || []} /></div>
+                {value.no_evidence_reason && <p className="text-xs text-amber-800">근거가 없는 이유: {value.no_evidence_reason}</p>}
+            </div>;
+            if ('field' in value && 'reason' in value) return <span>
+                <strong>{value.field.split('.').map(reviewLabel).join(' · ')}</strong>: {reviewReason(value.reason)}
+            </span>;
+            return <dl className="space-y-2">{Object.entries(value).map(([key, item]) =>
+                <div key={key} className="border-l-2 border-slate-200 pl-3">
+                    <dt className="font-medium text-slate-600">{reviewLabel(key)}</dt>
+                    <dd className="mt-1 break-words"><ReviewValue value={item} field={key} /></dd>
+                </div>
+            )}</dl>;
+        }
+
+        function ReviewDisclosure({ title, children, defaultOpen = false }) {
+            const [expanded, setExpanded] = React.useState(defaultOpen);
+            const contentId = React.useId();
+            return <div className="rounded border border-slate-200 bg-white p-3" data-review-disclosure>
+                <button type="button" aria-expanded={expanded} aria-controls={contentId}
+                    className="flex w-full items-center gap-2 text-left font-semibold"
+                    onClick={() => setExpanded(previous => !previous)}>
+                    <span aria-hidden="true">{expanded ? '▾' : '▸'}</span>
+                    {title}<span className="ml-auto text-xs text-slate-500">{expanded ? '접기' : '펼치기'}</span>
+                </button>
+                <div id={contentId} hidden={!expanded} className="mt-3">{children}</div>
+            </div>;
+        }
+
+        function ReviewFacts({ facts, defaultOpen = false }) {
+            return <ReviewDisclosure title="서버에서 확인한 사실과 출처" defaultOpen={defaultOpen}>
+                <ReviewValue value={facts} />
+            </ReviewDisclosure>;
+        }
+
+        function AiReviewResult({ result }) {
+            return <div className="space-y-3 mt-3 text-sm leading-relaxed" data-ai-review-result>
+                <p className="font-semibold">AI 참고 의견이며 승인·반려 결정이 아닙니다.</p>
+                <p className="text-xs text-slate-500">{REVIEW_VALUES[result.model_status] || result.model_status}
+                    {' · 생성: '}{reviewTime(result.generated_at)}</p>
+                <section className="rounded border border-blue-200 bg-white p-3 space-y-3">
+                    <h5 className="font-semibold text-blue-900">AI 참고 의견</h5>
+                    <ReviewValue value={result.ai_review} />
+                </section>
+                <section className="rounded border border-amber-200 bg-amber-50 p-3 space-y-2">
+                    <h5 className="font-semibold text-amber-900">미확인 정보와 분석 한계</h5>
+                    <ReviewValue value={result.uncertainties} />
+                </section>
+                <ReviewFacts facts={result.policy_facts || result.server_facts} />
+                <ReviewDisclosure title="AI가 참조한 검증된 근거">
+                    <ReviewEvidence items={result.evidence_ids || []} />
+                </ReviewDisclosure>
+            </div>;
+        }
+
+        // 부모의 상태 갱신·대기열 폴링에도 컴포넌트와 펼침 상태를 유지한다.
+        function OtherReviewPanel({ type, id, current = {}, onRequest }) {
+            return <div className="mt-3 rounded border border-slate-200 p-3 text-xs space-y-2" aria-busy={!!current.loading}>
+                <p>AI 의견은 참고 자료이며 처리 상태를 변경하지 않습니다.</p>
+                <div className="flex gap-2">
+                    <button onClick={() => onRequest(type, id)} disabled={current.loading}
+                        className="px-2 py-1 rounded border">서버 사실 조회</button>
+                    <button onClick={() => onRequest(type, id, true)} disabled={current.loading}
+                        className="px-2 py-1 rounded border">{current.loading === 'ai' ? 'AI 검토 중…' : 'AI 참고 의견 요청'}</button>
+                </div>
+                {current.loading && <p role="status">{current.loading === 'ai' ? 'AI 참고 의견을 생성하고 있습니다…' : '서버 사실을 조회하고 있습니다…'}</p>}
+                {current.error && <p role="alert">검토 오류: {aiReviewErrorLabel(current.error)}</p>}
+                {current.facts && !current.advice && <ReviewFacts facts={current.facts} defaultOpen />}
+                {current.advice && <AiReviewResult result={current.advice} />}
+            </div>;
+        }
 
         const AUDIT_EVENT_LABELS = {
             ACCESS_DECISION: '자료 접근 판단',
@@ -3414,7 +3600,7 @@
 
             const requestOtherReview = async (type, id, ai = false) => {
                 const key = `${type}:${id}`;
-                setOtherReview(prev => ({ ...prev, [key]: { ...prev[key], loading: true, error: null } }));
+                setOtherReview(prev => ({ ...prev, [key]: { ...prev[key], loading: ai ? 'ai' : 'facts', error: null } }));
                 try {
                     const response = await fetch(`/api/admin/reviews/${type}/${id}/${ai ? 'ai-review' : 'facts'}`, {
                         method: ai ? 'POST' : 'GET', headers: { 'Authorization': `Bearer ${auth.token}` }
@@ -3422,7 +3608,7 @@
                     const data = await response.json();
                     setOtherReview(prev => ({ ...prev, [key]: {
                         ...prev[key], loading: false,
-                        ...(response.ok ? { [ai ? 'advice' : 'facts']: data } :
+                        ...(response.ok ? { [ai ? 'advice' : 'facts']: data, ...(!ai ? { advice: null } : {}) } :
                             { error: data.code || `HTTP ${response.status}` })
                     } }));
                 } catch (error) {
@@ -3452,27 +3638,6 @@
                 } catch (error) {
                     setUnassignedCandidates({ error: 'network_error' });
                 }
-            };
-
-            const OtherReviewPanel = ({ type, id }) => {
-                const current = otherReview[`${type}:${id}`] || {};
-                return <div className="mt-3 rounded border border-slate-200 p-3 text-xs space-y-2">
-                    <p>AI 의견은 참고 자료이며 처리 상태를 변경하지 않습니다.</p>
-                    <div className="flex gap-2">
-                        <button onClick={() => requestOtherReview(type, id)} disabled={current.loading}
-                            className="px-2 py-1 rounded border">서버 사실 조회</button>
-                        <button onClick={() => requestOtherReview(type, id, true)} disabled={current.loading}
-                            className="px-2 py-1 rounded border">AI 참고 의견 요청</button>
-                    </div>
-                    {current.error && <p role="alert">검토 오류: {aiReviewErrorLabel(current.error)}</p>}
-                    {current.facts && <section><strong>서버 사실</strong><pre className="whitespace-pre-wrap break-all">{JSON.stringify(current.facts, null, 2)}</pre></section>}
-                    {current.advice && <>
-                        <section><strong>서버 사실</strong><pre className="whitespace-pre-wrap break-all">{JSON.stringify(current.advice.server_facts, null, 2)}</pre></section>
-                        <section><strong>AI 의견</strong><pre className="whitespace-pre-wrap break-all">{JSON.stringify(current.advice.ai_review, null, 2)}</pre></section>
-                        <section><strong>불확실성</strong><pre className="whitespace-pre-wrap break-all">{JSON.stringify(current.advice.uncertainties, null, 2)}</pre></section>
-                        <section><strong>근거 ID</strong><pre className="whitespace-pre-wrap break-all">{JSON.stringify(current.advice.evidence_ids, null, 2)}</pre></section>
-                    </>}
-                </div>;
             };
 
             const handleApprove = async (approvalId, downloadAllowed = false) => {
@@ -3904,18 +4069,7 @@
                                             </button>
                                             {approval.requester_id === auth.user?.id && <p>본인 요청은 검토할 수 없습니다.</p>}
                                             {approvalAi[approval.id]?.error && <p role="alert">AI 검토 실패: {aiReviewErrorLabel(approvalAi[approval.id].error)}</p>}
-                                            {approvalAi[approval.id]?.result && <div className="space-y-2 mt-2">
-                                                <p className="font-semibold">AI 참고 의견이며 승인·반려 결정이 아닙니다.</p>
-                                                <p>모델 상태: {approvalAi[approval.id].result.model_status} · 생성 시각: {approvalAi[approval.id].result.generated_at}</p>
-                                                <section><h5 className="font-semibold">서버 사실</h5>
-                                                    <pre className="whitespace-pre-wrap break-all">{JSON.stringify(approvalAi[approval.id].result.policy_facts, null, 2)}</pre></section>
-                                                <section><h5 className="font-semibold">AI 참고 의견</h5>
-                                                    <pre className="whitespace-pre-wrap break-all">{JSON.stringify(approvalAi[approval.id].result.ai_review, null, 2)}</pre></section>
-                                                <section><h5 className="font-semibold">미확인·분석 한계</h5>
-                                                    <pre className="whitespace-pre-wrap break-all">{JSON.stringify(approvalAi[approval.id].result.uncertainties, null, 2)}</pre></section>
-                                                <section><h5 className="font-semibold">검증된 근거 ID</h5>
-                                                    <pre className="whitespace-pre-wrap break-all">{JSON.stringify(approvalAi[approval.id].result.evidence_ids, null, 2)}</pre></section>
-                                            </div>}
+                                            {approvalAi[approval.id]?.result && <AiReviewResult result={approvalAi[approval.id].result} />}
                                         </div>
                                         <div className="bg-white/60 rounded p-3 text-xs text-slate-600 mb-3 leading-relaxed">
                                             <div className="font-semibold text-slate-700 mb-1">승인 옵션</div>
@@ -4014,7 +4168,8 @@
                                                 <span className="font-semibold">요청 사유:</span> {req.reason || '사유 없음'}
                                             </div>
 
-                                            <OtherReviewPanel type="assignment" id={req.id} />
+                                            <OtherReviewPanel type="assignment" id={req.id}
+                                                current={otherReview[`assignment:${req.id}`]} onRequest={requestOtherReview} />
 
                                             <div className="flex flex-wrap gap-2">
                                                 <button
@@ -4591,7 +4746,8 @@
                                                     <div className="text-slate-500 mb-1">자동 판정 사유:</div>
                                                     {req.justification}
                                                 </div>
-                                                <OtherReviewPanel type="login" id={req.id} />
+                                                <OtherReviewPanel type="login" id={req.id}
+                                                    current={otherReview[`login:${req.id}`]} onRequest={requestOtherReview} />
                                                 <div className="flex gap-3">
                                                     <button
                                                         onClick={() => handleBgApprove(req.id)}
@@ -4748,7 +4904,8 @@
                                                     <div className="text-slate-500 text-xs mb-1">발동자 정당화 사유:</div>
                                                     {a.justification}
                                                 </div>
-                                                <OtherReviewPanel type="break_glass" id={a.id} />
+                                                <OtherReviewPanel type="break_glass" id={a.id}
+                                                    current={otherReview[`break_glass:${a.id}`]} onRequest={requestOtherReview} />
                                                 <div className="flex gap-2">
                                                     <button
                                                         onClick={() => handleBrReview(a.id, 'justified')}

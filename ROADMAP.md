@@ -154,6 +154,18 @@ C:/zerotrust/source/.venv/Scripts/python.exe -m pytest -q tests/scenarios/test_b
 스위트 결과이며 새 S5 화면의 실제 사용자 흐름이나 운영 보안성 검증은 아니다.
 검증용 PostgreSQL은 종료했다. 기능 코드는 추가 수정하지 않았으며 커밋·push는 하지 않았다.
 
+메인 작업 폴더 반영(2026-10-22): 사용자 요청으로 S1을 로컬 커밋 `2d22459`에
+저장하고 `feat/retire-policy-challenger`의 기존 검토 화면·AI 근거 제한 개선을
+`feat/ai-behavior-analysis`에 통합했다. 문서 충돌은 확정된 S1/D4와 기존 화면
+수정 기록을 모두 보존해 해결했다. 메인 작업 위치는 `C:/zerotrust`로 전환한다.
+통합 후 `source`에서 기존 가상환경으로 `python -m pytest --noconftest -q
+tests/unit/test_behavior_timeline.py tests/unit/test_ai_review_display.py
+tests/unit/test_other_approval_review.py tests/unit/test_approval_ai_review.py
+tests/unit/test_other_approval_handler.py --tb=short --show-capture=no` 실행 결과
+**84 passed, 2 skipped**. 브라우저 표시 테스트 2개는 환경 조건으로 미실행이며
+기존 432개 전체 회귀 결과와 구분한다. 코드 규칙 검사 105개 파일 통과.
+이번 반영은 로컬 브랜치 통합·작업 위치 변경이며 develop/main 병합이나 push는 아니다.
+
 ### S2 — 1차 탐지 후보와 합성 시나리오
 
 - 첫 범위는 C1 업무 목적과 실제 사용의 불일치, C2 여러 경로를 거친 반복 접근이다.
@@ -272,6 +284,24 @@ python scripts/check_code_conventions.py
 코드 규칙·단위·DB/API·화면·설치 검증을 분리해 명령·결과·미실행 이유를 남긴다.
 각 단계 종료 시 `git diff --check`, diff·파일 목록·비밀값/임시 파일 여부를 확인하고
 완료 보고는 루트 AGENTS.md 8절을 따른다. 일정 추정은 완료 조건을 대신하지 않는다.
+
+## 모든 승인 AI 결과의 가독성 개선 (2026-10-22)
+
+- 2026-10-22 잔여 변경 커밋 전 재검증: `source`에서 `.venv/Scripts/python.exe -m pytest tests/unit/test_ai_review_display.py tests/unit/test_other_approval_review.py tests/unit/test_approval_ai_review.py tests/unit/test_other_approval_handler.py -q` 결과 28 passed / 2 skipped. 브라우저·React/ReactDOM/Babel 자산 조건을 충족하지 못해 표시 테스트 2개는 미실행이며, 코드 규칙 검사 100개 파일과 `git diff --check`는 통과했다. DB 연결은 사용 불가한 로컬 테스트 포트로 지정해 실제 DB에 접속하지 않았다. 이번 결과는 앞선 화면 검증 기록을 대체하지 않는다.
+- 목표: 자료 접근·로그인·담당 등록·긴급 접근 사후 심사의 AI 결과와 서버 사실을 JSON 대신 한국어 항목으로 표시한다.
+- 완료 조건: 네 유형이 공통 표시를 사용하고 의견·보완·모순·미확인·출처를 구분하며, 한국 시간과 미확인 값을 정확히 표시한다. 서버 응답·AI 입력·접근·승인 정책은 유지한다.
+- 상태: 완료. 네 유형의 모의 응답을 React 18·헤드리스 Chromium에서 렌더링하고 전체 JSX 구문, 한국어·미확인·근거·한국 시간 표시, HTML 문자열 이스케이프와 API 객체 불변을 확인했다.
+- 검증: 관련 29개 통과, 전체 `pytest -q`는 186 passed / 159 skipped. 테스트 DB 연결을 사용 불가한 로컬 포트로 지정하여 DB 의존 검증은 실행하지 않았다. 코드 규칙 검사 100개 파일 통과. 범위·부관리자 표시 추가 후 브라우저 테스트도 재통과했다.
+- 실행 중인 설치본의 `static/index.html`에 반영하고 `http://127.0.0.1:18080/` 응답에서 공통 컴포넌트와 네 유형 연결, 기존 JSON 출력 제거를 확인했다. 실제 계정으로 새 AI 의견을 생성하는 E2E는 이번 작업에서 실행하지 않았다.
+
+### BG 조회 펼침 상태·AI 결과 후속 수정
+
+- 목표·완료 조건: 서버 사실 조회 후 펼침 상태가 부모 갱신·10초 폴링 중에도 유지되고, AI 진행·성공·근거 검증 실패가 표시되며 수동 심사는 계속 사용할 수 있다.
+- 원인: 관리자 함수 안에서 정의한 검토 컴포넌트가 매 렌더마다 재생성됐다. 당시 BG 감사에는 `evidence_ref_invalid` 실패와 다음 호출의 성공이 모두 기록돼 있었다.
+- 수정: 검토 패널을 전역 공통 컴포넌트로 옮기고 조회한 사실은 처음에 펼친다. AI 진행·근거 검증 오류 안내를 추가한다. 로그인·담당 등록·BG AI의 생성 스키마를 해당 호출의 근거 별칭과 기존 항목 상한으로 제한하고 서버 재검증은 유지한다.
+- 상태: 완료. 실제 관리자 컴포넌트에 모의 응답을 연결한 브라우저에서 조회 직후 펼침·수동 닫힘·부모 갱신·폴링·AI 대기/성공/근거 오류·수동 심사 버튼 보존을 확인했다. 관련 13개 통과, 전체 `pytest -q` 189 passed / 159 skipped, 코드 규칙 검사 100개 파일 통과. DB 연결은 사용 불가한 테스트 포트로 지정하여 DB 의존 검증은 실행하지 않았다.
+- 실제 사건·사유·개인정보 없는 합성 BG 입력으로 OpenAI 생성과 서버 근거 검증이 성공했다. 설치본 HTML·AI 전송 모듈을 반영하고 서버만 재시작했으며 정상 응답·제공 HTML 일치·기존 환경 설정 보존을 확인했다. 실제 계정의 새 BG AI 요청 E2E는 미실행이다.
+- 토글 후속: 사용자 환경에서 다시 접히는 증상이 지속돼 기본 `details`를 React 상태가 관리하는 버튼·콘텐츠 영역으로 교체했다. 앞선 테스트의 DOM 속성 직접 변경 대신 실제 버튼 클릭으로 서버 사실과 AI 근거의 열기·닫기 및 부모 갱신·폴링·AI 응답 중 유지 여부를 확인했다. `pytest source/tests/unit/test_ai_review_display.py -q` 2개 통과. 설치본 HTML 일치 확인 완료. 사용자의 기존 브라우저 탭에서의 재확인은 남아 있다.
 
 ## 설치본 사용자 검증 후속 수정 (2026-10-08)
 
